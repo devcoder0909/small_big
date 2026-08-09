@@ -28,18 +28,19 @@ from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
-# Base indicator weights for the 10 indicators
+# Base indicator weights for the 11 indicators
 DEFAULT_WEIGHTS = {
-    "streak_reversal": 0.14,
-    "markov_transition": 0.16,
-    "stat_frequency": 0.12,
-    "ema_momentum": 0.10,
-    "pattern_match": 0.14,
-    "harmonic_periodicity": 0.07,
-    "bayesian_posterior": 0.09,
+    "streak_reversal": 0.13,
+    "markov_transition": 0.15,
+    "stat_frequency": 0.11,
+    "ema_momentum": 0.09,
+    "pattern_match": 0.13,
+    "harmonic_periodicity": 0.06,
+    "bayesian_posterior": 0.08,
     "volatility_regime": 0.05,
-    "chi_square_skew": 0.07,
+    "chi_square_skew": 0.06,
     "runs_test": 0.06,
+    "sequence_hash_miner": 0.08,
 }
 
 
@@ -498,8 +499,57 @@ def _analyze_runs_test_indicator(sizes: list[str]) -> dict:
     return {"prediction": None, "confidence": 0, "reason": f"runs_test_random_z_{z_runs:.2f}"}
 
 
+def _analyze_sequence_hash_miner_indicator(sizes: list[str]) -> dict:
+    """
+    Historical Sequence Hash Mining (Exact N-Bit State Vector Matcher).
+    Converts current 5-draw sequence vector into a hash, searches historical records (up to 500 draws)
+    for exact pattern matches, and computes the empirical historical next-draw outcome distribution.
+    """
+    if len(sizes) < 25:
+        return {"prediction": None, "confidence": 0, "reason": "insufficient_data"}
+
+    pattern_len = 5
+    current_pattern = tuple(sizes[:pattern_len])
+
+    small_count = 0
+    big_count = 0
+
+    # Scan history for exact pattern matches
+    for i in range(pattern_len, len(sizes) - 1):
+        if tuple(sizes[i : i + pattern_len]) == current_pattern:
+            next_outcome = sizes[i - 1]
+            if next_outcome == "SMALL":
+                small_count += 1
+            elif next_outcome == "BIG":
+                big_count += 1
+
+    total_matches = small_count + big_count
+    if total_matches < 2:
+        return {"prediction": None, "confidence": 0, "reason": f"insufficient_sequence_hash_matches_n_{total_matches}"}
+
+    small_ratio = (small_count + 1) / (total_matches + 2)  # Laplace smoothing
+    big_ratio = (big_count + 1) / (total_matches + 2)
+
+    if small_ratio > 0.55:
+        conf = min(0.88, 0.52 + (small_ratio - 0.55) * 0.9)
+        return {
+            "prediction": "SMALL",
+            "confidence": round(conf, 3),
+            "reason": f"sequence_hash_match_small_{small_count}/{total_matches}",
+        }
+    elif big_ratio > 0.55:
+        conf = min(0.88, 0.52 + (big_ratio - 0.55) * 0.9)
+        return {
+            "prediction": "BIG",
+            "confidence": round(conf, 3),
+            "reason": f"sequence_hash_match_big_{big_count}/{total_matches}",
+        }
+
+    return {"prediction": None, "confidence": 0, "reason": f"sequence_hash_split_{small_count}_vs_{big_count}"}
+
+
 def _run_all_indicators(sizes: list[str]) -> dict:
-    """Run all 10 statistical indicators and return the indicators dict."""
+    """Run all 11 statistical indicators and return the indicators dict."""
     return {
         "streak_reversal": _analyze_streak_indicator(sizes),
         "markov_transition": _analyze_markov_transition_indicator(sizes),
@@ -511,6 +561,7 @@ def _run_all_indicators(sizes: list[str]) -> dict:
         "volatility_regime": _analyze_volatility_regime_indicator(sizes),
         "chi_square_skew": _analyze_chi_square_goodness_of_fit_indicator(sizes),
         "runs_test": _analyze_runs_test_indicator(sizes),
+        "sequence_hash_miner": _analyze_sequence_hash_miner_indicator(sizes),
     }
 
 
@@ -518,7 +569,7 @@ def _calculate_adaptive_indicator_weights(sizes: list[str], base_weights: dict) 
     """
     Self-Learning Adaptive Weighting Engine.
 
-    Backtests each of the 10 indicators on recent historical draws (last 15 draws)
+    Backtests each of the 11 indicators on recent historical draws (last 15 draws)
     to calculate real-time individual indicator win rates.
 
     - Hot indicators (win rate > 50%) receive up to 2.5x dynamic weight amplification.
@@ -539,6 +590,7 @@ def _calculate_adaptive_indicator_weights(sizes: list[str], base_weights: dict) 
         "volatility_regime": _analyze_volatility_regime_indicator,
         "chi_square_skew": _analyze_chi_square_goodness_of_fit_indicator,
         "runs_test": _analyze_runs_test_indicator,
+        "sequence_hash_miner": _analyze_sequence_hash_miner_indicator,
     }
 
     indicator_wins = {name: 0 for name in base_weights}
@@ -751,15 +803,19 @@ async def generate_prediction(
 
     # === MULTI-TIER CONFLUENCE BOOSTING ===
 
-    # Tier 1: Micro-Macro Multi-Window Agreement (10 vs 30 vs 100 draw windows)
+    # Tier 1: Dual-Horizon Synthesis (Micro 15 vs Macro 100 agreement)
     if len(sizes) >= 30:
-        micro_sizes = sizes[:10]
-        micro_small = sum(1 for s in micro_sizes if s == "SMALL")
-        micro_big = len(micro_sizes) - micro_small
-        micro_dir = "SMALL" if micro_small > micro_big else "BIG"
+        micro_indicators = _run_all_indicators(sizes[:15])
+        macro_indicators = _run_all_indicators(sizes[:min(100, len(sizes))])
 
-        if micro_dir == prediction and agreeing >= 4:
-            confidence = round(min(0.95, confidence + 0.08), 3)
+        m_small, m_big, m_tot, _ = _score_indicators(micro_indicators, weights)
+        M_small, M_big, M_tot, _ = _score_indicators(macro_indicators, weights)
+
+        micro_dir = "SMALL" if m_small >= m_big else "BIG"
+        macro_dir = "SMALL" if M_small >= M_big else "BIG"
+
+        if micro_dir == prediction and macro_dir == prediction:
+            confidence = round(min(0.96, confidence + 0.08), 3)
 
     # Tier 2: Super-majority boost (7+ of 10 indicators agree)
     if agreeing >= 7 and active_indicators >= 8:
