@@ -682,9 +682,14 @@ async def generate_prediction(
             "label": "STATISTICAL ANALYSIS — NOT A GUARANTEE",
         }
 
-    # Normalize scores
-    norm_small = small_score / total_weight if total_weight > 0 else 0.5
-    norm_big = big_score / total_weight if total_weight > 0 else 0.5
+    # Relative probability normalization over active votes
+    sum_active_scores = small_score + big_score
+    if sum_active_scores > 0:
+        norm_small = small_score / sum_active_scores
+        norm_big = big_score / sum_active_scores
+    else:
+        norm_small = 0.5
+        norm_big = 0.5
 
     # Final decision
     if norm_small > norm_big:
@@ -695,7 +700,7 @@ async def generate_prediction(
         confidence = round(norm_big, 3)
     else:
         prediction = sizes[0]  # Tie-break: follow latest
-        confidence = 0.50
+        confidence = 0.500
 
     # Count indicator agreement
     agreeing = sum(

@@ -1,4 +1,4 @@
-"""Public routes — Superfast lightweight prediction UI with live countdown and side-by-side prediction history."""
+"""Public routes — Superfast zero-animation prediction UI focusing strictly on accurate data and timers."""
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import HTMLResponse
@@ -20,142 +20,145 @@ HTML_PAGE = """<!DOCTYPE html>
   <title>WinGo Predictor</title>
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
-    body{background:#0a0a0f;color:#ddd;font-family:system-ui,-apple-system,sans-serif;padding:10px;min-height:100vh}
-    .c{max-width:420px;margin:0 auto}
-    h1{font-size:14px;text-align:center;color:#888;letter-spacing:2px;text-transform:uppercase;padding:6px 0}
-    .card{background:#111;border:1px solid #1e1e2e;border-radius:10px;padding:12px;margin-bottom:8px}
-    .timer{text-align:center}
-    .timer .lbl{font-size:10px;color:#777;text-transform:uppercase;letter-spacing:1.5px;font-weight:700}
-    .timer .t{font-size:36px;font-weight:700;color:#ffd700;font-variant-numeric:tabular-nums;letter-spacing:2px;margin:2px 0}
-    .timer .bar{height:3px;background:#1a1a2e;border-radius:2px;margin-top:6px}
-    .timer .fill{height:100%;background:#ffd700;border-radius:2px;transition:width .3s}
-    .timer .p{font-size:11px;color:#666;margin-top:6px;font-variant-numeric:tabular-nums}
-    .pred{text-align:center}
-    .pred .lbl{font-size:10px;color:#777;text-transform:uppercase;letter-spacing:1.5px;font-weight:700}
-    .pred .sig{font-size:54px;font-weight:900;line-height:1.1;margin:2px 0}
-    .pred .sig.big{color:#ff4d6a}
-    .pred .sig.small{color:#4da6ff}
-    .pred .sig.wait{color:#444;font-size:26px}
-    .pred .conf{font-size:12px;color:#666;margin-top:2px}
-    .pred .conf b{color:#ddd}
-    .badge{display:inline-block;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:700;margin-left:4px}
-    .badge.h{background:#00d68f22;color:#00d68f}
-    .badge.m{background:#ffd70022;color:#ffd700}
-    .badge.l{background:#66666622;color:#888}
-    .stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px}
-    .stat{background:#111;border:1px solid #1e1e2e;border-radius:8px;padding:8px 4px;text-align:center}
-    .stat .v{font-size:15px;font-weight:700;font-variant-numeric:tabular-nums}
-    .stat .v.g{color:#00d68f}.stat .v.y{color:#ffd700}.stat .v.b{color:#4da6ff}
-    .stat .l{font-size:9px;color:#555;text-transform:uppercase;letter-spacing:1px;margin-top:1px}
-    .hdr{display:flex;justify-content:space-between;align-items:center;padding-bottom:6px;border-bottom:1px solid #1a1a2e;margin-bottom:4px}
-    .hdr span{font-size:10px;color:#777;text-transform:uppercase;letter-spacing:1px;font-weight:700}
-    .hdr .pct{color:#00d68f;font-weight:700;font-size:11px}
-    .row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #0e0e18}
-    .row:last-child{border:none}
-    .row .left{display:flex;align-items:center;gap:6px}
-    .num{width:26px;height:26px;display:flex;align-items:center;justify-content:center;border-radius:5px;font-weight:700;font-size:12px}
-    .num.rb{background:#ff4d6a22;color:#ff4d6a}
-    .num.sb{background:#4da6ff22;color:#4da6ff}
-    .info{display:flex;flex-direction:column}
-    .info .id{font-size:10px;color:#555;font-variant-numeric:tabular-nums}
-    .info .sz{font-size:12px;font-weight:700}
-    .info .sz.big{color:#ff4d6a}.info .sz.small{color:#4da6ff}
-    .mid{display:flex;flex-direction:column;align-items:center}
-    .mid .plbl{font-size:9px;color:#555;text-transform:uppercase;letter-spacing:0.5px}
-    .mid .psz{font-size:11px;font-weight:700}
-    .mid .psz.big{color:#ff4d6a}.mid .psz.small{color:#4da6ff}
-    .w{padding:3px 8px;border-radius:4px;font-size:10px;font-weight:700;white-space:nowrap}
-    .w.win{background:#00d68f18;color:#00d68f;border:1px solid #00d68f33}
-    .w.loss{background:#ff4d6a18;color:#ff4d6a;border:1px solid #ff4d6a33}
-    .dis{text-align:center;font-size:9px;color:#444;padding:6px}
-    .urgent{animation:p .5s infinite}
-    @keyframes p{50%{opacity:.4}}
+    body{background:#0d0d12;color:#eee;font-family:system-ui,sans-serif;padding:12px;max-width:400px;margin:0 auto}
+    h1{font-size:15px;text-align:center;color:#aaa;margin-bottom:10px;text-transform:uppercase;letter-spacing:1px}
+    .box{background:#14141c;border:1px solid #222;border-radius:6px;padding:12px;margin-bottom:10px}
+    .lbl{font-size:11px;color:#777;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px}
+    .timer-val{font-size:32px;font-weight:700;color:#f5c518;font-family:monospace}
+    .sub{font-size:11px;color:#666;margin-top:2px}
+    .pred-val{font-size:44px;font-weight:900;margin:4px 0;line-height:1}
+    .pred-val.big{color:#ff4d6a}
+    .pred-val.small{color:#4da6ff}
+    .pred-val.wait{color:#555;font-size:24px}
+    .conf-txt{font-size:12px;color:#888}
+    .conf-txt b{color:#fff}
+    .badge{display:inline-block;padding:2px 6px;border-radius:3px;font-size:10px;font-weight:700}
+    .badge.high{background:#00d68f22;color:#00d68f}
+    .badge.med{background:#ffd70022;color:#ffd700}
+    .badge.low{background:#88888822;color:#aaa}
+    .grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px}
+    .g-box{background:#14141c;border:1px solid #222;border-radius:6px;padding:8px;text-align:center}
+    .g-val{font-size:15px;font-weight:700;font-family:monospace}
+    .g-val.green{color:#00d68f}.g-val.gold{color:#ffd700}.g-val.blue{color:#4da6ff}
+    .g-lbl{font-size:9px;color:#666;text-transform:uppercase;margin-top:2px}
+    table{width:100%;border-collapse:collapse;font-size:12px}
+    th{text-align:left;font-size:10px;color:#666;padding-bottom:6px;text-transform:uppercase;border-bottom:1px solid #222}
+    td{padding:6px 0;border-bottom:1px solid #1a1a24;font-family:monospace}
+    .tag{display:inline-block;padding:1px 5px;border-radius:3px;font-size:11px;font-weight:700}
+    .tag.big{color:#ff4d6a}.tag.small{color:#4da6ff}
+    .win{color:#00d68f;font-weight:700}
+    .loss{color:#ff4d6a;font-weight:700}
+    .foot{text-align:center;font-size:9px;color:#444;margin-top:8px}
   </style>
 </head>
 <body>
-<div class="c">
-  <h1>WinGo Predictor</h1>
-  <div class="card timer">
+  <h1>WinGo Predictor Engine</h1>
+
+  <div class="box" style="text-align:center">
     <div class="lbl">NEXT PREDICTION IN</div>
-    <div class="t" id="tm">--:--</div>
-    <div class="bar"><div class="fill" id="br" style="width:100%"></div></div>
-    <div class="p" id="pr">Target Period #---</div>
+    <div class="timer-val" id="timer-text">00:30</div>
+    <div class="sub" id="target-issue">Target Period #---</div>
   </div>
-  <div class="card pred">
-    <div class="lbl">ENGINE NEXT PREDICTION</div>
-    <div class="sig wait" id="sg">---</div>
-    <div class="conf" id="cf">Loading...</div>
+
+  <div class="box" style="text-align:center">
+    <div class="lbl">CURRENT ENGINE PREDICTION</div>
+    <div class="pred-val wait" id="pred-text">---</div>
+    <div class="conf-txt" id="conf-text">Loading prediction engine...</div>
   </div>
-  <div class="stats">
-    <div class="stat"><div class="v g" id="sw">-</div><div class="l">Wins/5</div></div>
-    <div class="stat"><div class="v y" id="si">-</div><div class="l">Signals</div></div>
-    <div class="stat"><div class="v b" id="sr">-</div><div class="l">Records</div></div>
+
+  <div class="grid">
+    <div class="g-box"><div class="g-val green" id="stat-wins">-</div><div class="g-lbl">Wins / 5</div></div>
+    <div class="g-box"><div class="g-val gold" id="stat-signals">-</div><div class="g-lbl">Signals</div></div>
+    <div class="g-box"><div class="g-val blue" id="stat-records">-</div><div class="g-lbl">Records</div></div>
   </div>
-  <div class="card">
-    <div class="hdr"><span>Real History & Prediction Match</span><span class="pct" id="ap">--%</span></div>
-    <div id="hl"><div style="text-align:center;color:#444;font-size:12px;padding:16px">Loading real history...</div></div>
+
+  <div class="box">
+    <div class="lbl" style="margin-bottom:8px;display:flex;justify-content:space-between">
+      <span>History & Accuracy</span>
+      <span id="accuracy-pct" style="color:#00d68f;font-weight:700">--%</span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Period</th>
+          <th>Actual</th>
+          <th>Predicted</th>
+          <th>Result</th>
+        </tr>
+      </thead>
+      <tbody id="history-body">
+        <tr><td colspan="4" style="text-align:center;color:#444;padding:12px">Loading history...</td></tr>
+      </tbody>
+    </table>
   </div>
-  <div class="dis">100% Real Scraped Data & Empirical Statistical Ensemble Engine.</div>
-</div>
+
+  <div class="foot">Statistical Analysis Engine. Real Scraped Data Only.</div>
+
 <script>
-function T(){
-  var s=new Date().getSeconds(),r=30-(s%30),p=(r/30)*100;
-  var e=document.getElementById('tm'),b=document.getElementById('br');
-  e.textContent='00:'+String(r).padStart(2,'0');
-  b.style.width=p+'%';
-  if(r<=5){e.classList.add('urgent');b.style.background='#ff4d6a'}
-  else{e.classList.remove('urgent');b.style.background='#ffd700'}
+function updateTimer() {
+  var nowSec = Math.floor(Date.now() / 1000);
+  var remSec = 30 - (nowSec % 30);
+  document.getElementById('timer-text').textContent = '00:' + String(remSec).padStart(2, '0');
 }
-async function U(){
-  try{
-    var r=await fetch('/api/v1/public/prediction');
-    var d=await r.json();
-    if(d&&d.prediction){
-      var s=document.getElementById('sg');
-      s.textContent=d.prediction;
-      s.className='sig '+d.prediction.toLowerCase();
-      document.getElementById('pr').textContent='Target Period #'+(d.upcoming_issue_id||'').slice(-8);
-      var cp=(d.confidence*100).toFixed(1);
-      var lv=d.confidence>=.75?'HIGH':d.confidence>=.55?'MED':'LOW';
-      var lc=d.confidence>=.75?'h':d.confidence>=.55?'m':'l';
-      document.getElementById('cf').innerHTML='Confidence: <b>'+cp+'%</b> <span class="badge '+lc+'">'+lv+'</span>';
-      document.getElementById('si').textContent=(d.active_indicators||'-')+'/'+(d.agreeing_indicators||'-');
-      document.getElementById('sr').textContent=d.total_records_analyzed||'-';
-    }else if(d&&d.status==='INSUFFICIENT_DATA'){
-      document.getElementById('sg').textContent='WAIT';
-      document.getElementById('sg').className='sig wait';
-      document.getElementById('cf').innerHTML='Collecting data...';
+
+async function updateData() {
+  try {
+    var res = await fetch('/api/v1/public/prediction');
+    var data = await res.json();
+
+    if (data && data.prediction) {
+      var predEl = document.getElementById('pred-text');
+      predEl.textContent = data.prediction;
+      predEl.className = 'pred-val ' + data.prediction.toLowerCase();
+
+      document.getElementById('target-issue').textContent = 'Target Period #' + (data.upcoming_issue_id || '').slice(-8);
+
+      var confPct = (data.confidence * 100).toFixed(1);
+      var level = data.confidence >= 0.75 ? 'HIGH' : data.confidence >= 0.55 ? 'MED' : 'LOW';
+      var badgeClass = data.confidence >= 0.75 ? 'high' : data.confidence >= 0.55 ? 'med' : 'low';
+
+      document.getElementById('conf-text').innerHTML = 'Confidence: <b>' + confPct + '%</b> <span class="badge ' + badgeClass + '">' + level + '</span>';
+      document.getElementById('stat-signals').textContent = (data.active_indicators || '-') + '/' + (data.agreeing_indicators || '-');
+      document.getElementById('stat-records').textContent = data.total_records_analyzed || '-';
+    } else if (data && data.status === 'INSUFFICIENT_DATA') {
+      document.getElementById('pred-text').textContent = 'WAIT';
+      document.getElementById('pred-text').className = 'pred-val wait';
+      document.getElementById('conf-text').textContent = 'Collecting historical records...';
     }
-    if(d&&d.recent_history&&d.recent_history.length>0){
-      var h=d.recent_history,w=h.filter(function(x){return x.is_win}).length;
-      var pct=Math.round((w/h.length)*100);
-      document.getElementById('sw').textContent=w+'/'+h.length;
-      var ae=document.getElementById('ap');
-      ae.textContent=pct+'%';
-      ae.style.color=pct>=60?'#00d68f':pct>=40?'#ffd700':'#ff4d6a';
-      document.getElementById('hl').innerHTML=h.map(function(i){
-        var b=i.size==='BIG';
-        var pb=i.predicted_size==='BIG';
-        var winText=i.is_win ? '✅ WIN (' + i.predicted_size + ')' : '❌ LOSS (' + i.predicted_size + ')';
-        return '<div class="row">' +
-          '<div class="left">' +
-            '<div class="num '+(b?'rb':'sb')+'">'+i.result+'</div>' +
-            '<div class="info">' +
-              '<span class="id">#'+i.issue_id.slice(-8)+'</span>' +
-              '<span class="sz '+(b?'big':'small')+'">'+i.size+'</span>' +
-            '</div>' +
-          '</div>' +
-          '<div class="mid">' +
-            '<span class="plbl">PRED</span>' +
-            '<span class="psz '+(pb?'big':'small')+'">'+i.predicted_size+'</span>' +
-          '</div>' +
-          '<span class="w '+(i.is_win?'win':'loss')+'">'+winText+'</span>' +
-        '</div>';
+
+    if (data && data.recent_history && data.recent_history.length > 0) {
+      var hist = data.recent_history;
+      var wins = hist.filter(function(x) { return x.is_win; }).length;
+      var total = hist.length;
+      var pct = Math.round((wins / total) * 100);
+
+      document.getElementById('stat-wins').textContent = wins + '/' + total;
+      var accEl = document.getElementById('accuracy-pct');
+      accEl.textContent = pct + '%';
+      accEl.style.color = pct >= 60 ? '#00d68f' : pct >= 40 ? '#ffd700' : '#ff4d6a';
+
+      var tbody = document.getElementById('history-body');
+      tbody.innerHTML = hist.map(function(item) {
+        var actClass = item.size === 'BIG' ? 'big' : 'small';
+        var predClass = item.predicted_size === 'BIG' ? 'big' : 'small';
+        var resClass = item.is_win ? 'win' : 'loss';
+        var resText = item.is_win ? '✅ WIN' : '❌ LOSS';
+
+        return '<tr>' +
+          '<td>#' + item.issue_id.slice(-8) + '</td>' +
+          '<td>' + item.result + ' <span class="tag ' + actClass + '">' + item.size + '</span></td>' +
+          '<td><span class="tag ' + predClass + '">' + item.predicted_size + '</span></td>' +
+          '<td class="' + resClass + '">' + resText + '</td>' +
+        '</tr>';
       }).join('');
     }
-  }catch(e){}
+  } catch (e) {}
 }
-T();U();setInterval(T,250);setInterval(U,1000);
+
+updateTimer();
+updateData();
+setInterval(updateTimer, 500);
+setInterval(updateData, 1000);
 </script>
 </body>
 </html>
@@ -164,7 +167,7 @@ T();U();setInterval(T,250);setInterval(U,1000);
 
 @router.get("/", response_class=HTMLResponse)
 async def serve_minimal_ui():
-    """Superfast lightweight prediction UI with live countdown."""
+    """Superfast zero-animation prediction UI focusing strictly on accurate data and timers."""
     return HTML_PAGE
 
 
