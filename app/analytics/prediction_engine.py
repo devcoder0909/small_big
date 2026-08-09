@@ -787,8 +787,9 @@ def _calculate_adaptive_indicator_weights(sizes: list[str], base_weights: dict, 
         if votes >= 3:
             win_rate = wins / votes
             if win_rate >= 0.55:
-                # Hot indicator boost: up to 2.5x
-                mult = 1.0 + (win_rate - 0.50) * 3.0
+                # Statistical significance check: require >= 5 backtest votes for major boost
+                sig_mult = 1.0 if votes >= 5 else 0.60
+                mult = 1.0 + (win_rate - 0.50) * 3.0 * sig_mult
             elif win_rate < 0.35:
                 # Failing indicator severe penalization: down to 0.05x
                 mult = 0.05
@@ -805,8 +806,11 @@ def _calculate_adaptive_indicator_weights(sizes: list[str], base_weights: dict, 
 
 def _score_indicators(indicators: dict, weights: dict) -> tuple:
     """
-    Score indicators using squared-confidence amplification.
-    High-confidence signals get exponentially more influence than low-confidence noise.
+    Score indicators using squared-confidence amplification & collinearity de-duplication.
+
+    High-confidence signals get exponentially more influence.
+    Correlated clusters (frequency indicators / pattern indicators) are de-duplicated
+    to prevent double-counting collinear signals.
 
     Returns (small_score, big_score, total_weight, active_indicators).
     """
@@ -815,20 +819,45 @@ def _score_indicators(indicators: dict, weights: dict) -> tuple:
     total_weight = 0.0
     active = 0
 
+    # Cluster definitions for collinearity dampening
+    freq_cluster = ["stat_frequency", "bayesian_posterior", "chi_square_skew"]
+    pattern_cluster = ["sequence_hash_miner", "pattern_match"]
+
+    active_freq_preds = [indicators.get(k, {}).get("prediction") for k in freq_cluster if indicators.get(k, {}).get("prediction")]
+    active_pattern_preds = [indicators.get(k, {}).get("prediction") for k in pattern_cluster if indicators.get(k, {}).get("prediction")]
+
+    # Count agreement inside clusters
+    freq_cluster_collinear = len(active_freq_preds) > 1 and len(set(active_freq_preds)) == 1
+    pattern_cluster_collinear = len(active_pattern_preds) > 1 and len(set(active_pattern_preds)) == 1
+
+    seen_freq = False
+    seen_pattern = False
+
     for name, indicator in indicators.items():
         w = weights.get(name, 0.08)
         pred = indicator.get("prediction")
         conf = indicator.get("confidence", 0)
 
         if pred and conf > 0:
+            # Apply collinearity dampening for secondary/tertiary cluster members
+            effective_w = w
+            if name in freq_cluster:
+                if seen_freq and freq_cluster_collinear:
+                    effective_w *= 0.60  # 40% dampening on collinear frequency signals
+                seen_freq = True
+            elif name in pattern_cluster:
+                if seen_pattern and pattern_cluster_collinear:
+                    effective_w *= 0.65  # 35% dampening on collinear pattern signals
+                seen_pattern = True
+
             # Squared confidence amplification: high-confidence indicators dominate
             amplified_conf = conf * conf
-            weighted_val = w * amplified_conf
+            weighted_val = effective_w * amplified_conf
             if pred == "SMALL":
                 small_score += weighted_val
             else:
                 big_score += weighted_val
-            total_weight += w * conf  # Normalize by linear weight
+            total_weight += effective_w * conf
             active += 1
 
     return small_score, big_score, total_weight, active
