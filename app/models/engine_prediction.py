@@ -1,7 +1,7 @@
 """EnginePrediction model — immutable audit log of original predictions."""
 
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, Float, DateTime, Index
+from sqlalchemy import Column, Integer, BigInteger, String, Float, DateTime, Index
 from app.models.base import Base
 
 
@@ -22,6 +22,8 @@ class EnginePrediction(Base):
     confluence_level = Column(String(32), nullable=True)
     agreeing_indicators = Column(Integer, nullable=True)
     active_indicators = Column(Integer, nullable=True)
+    created_at_ms = Column(BigInteger, nullable=True)
+    expires_at_ms = Column(BigInteger, nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (

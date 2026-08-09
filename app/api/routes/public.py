@@ -92,26 +92,37 @@ HTML_PAGE = """<!DOCTYPE html>
 
 <script>
 var timeOffsetMs = 0;
-var lastRemSec = -1;
 var lastRenderedIssueId = "";
+var currentPredictionData = null;
+var isRefetching = false;
 
-function checkRollover() {
+function updatePredictionCountdown() {
   var serverNowMs = Date.now() + timeOffsetMs;
-  var nowSec = Math.floor(serverNowMs / 1000);
-  var remSec = 30 - (nowSec % 30);
-
   var timerEl = document.getElementById('sub-timer');
-  if (timerEl) {
-    timerEl.textContent = '⚡ Live • Auto-Updates in ' + remSec + 's';
-  }
 
-  // Trigger instant refetch on period rollover and sub-second retries
-  if (lastRemSec !== -1 && remSec > lastRemSec) {
-    updateData();
-    setTimeout(updateData, 1500);
-    setTimeout(updateData, 3500);
+  if (currentPredictionData && currentPredictionData.expires_at_ms) {
+    var remainingMs = Math.max(0, currentPredictionData.expires_at_ms - serverNowMs);
+    var remainingSec = Math.ceil(remainingMs / 1000);
+
+    if (timerEl) {
+      if (remainingSec > 0) {
+        timerEl.textContent = '⚡ Prediction Active • Expires in ' + remainingSec + 's';
+        timerEl.style.color = '#00d68f';
+      } else {
+        timerEl.textContent = '⚡ 0s • Updating Prediction...';
+        timerEl.style.color = '#ffd700';
+
+        // Immediate refetch when countdown hits 0s
+        if (!isRefetching) {
+          isRefetching = true;
+          updateData().then(function() { isRefetching = false; });
+        }
+      }
+    }
+  } else if (timerEl) {
+    timerEl.textContent = '⚡ Prediction Active';
+    timerEl.style.color = '#00d68f';
   }
-  lastRemSec = remSec;
 }
 
 async function updateData() {
@@ -124,6 +135,7 @@ async function updateData() {
     }
 
     if (data && data.prediction) {
+      currentPredictionData = data;
       var rawIssue = data.upcoming_issue_id || '';
       var currPeriodId = rawIssue.slice(-8);
 
@@ -182,10 +194,10 @@ async function updateData() {
   } catch (e) {}
 }
 
-checkRollover();
+updatePredictionCountdown();
 updateData();
-setInterval(checkRollover, 200);
-setInterval(updateData, 1500);
+setInterval(updatePredictionCountdown, 200);
+setInterval(updateData, 2000);
 </script>
 </body>
 </html>

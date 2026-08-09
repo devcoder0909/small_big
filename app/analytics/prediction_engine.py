@@ -21,6 +21,7 @@ IMPORTANT DISCLAIMERS:
 """
 
 import math
+import time
 from datetime import datetime, timezone
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -975,8 +976,16 @@ async def generate_prediction(
 
     # Tier 1: Dual-Horizon Synthesis (Micro 15 vs Macro 100 agreement)
     if len(sizes) >= 30:
-        micro_indicators = _run_all_indicators(sizes[:15])
-        macro_indicators = _run_all_indicators(sizes[:min(100, len(sizes))])
+        micro_indicators = _run_all_indicators(
+            sizes[:15],
+            numbers[:15] if numbers else None,
+            colors[:15] if colors else None
+        )
+        macro_indicators = _run_all_indicators(
+            sizes[:min(100, len(sizes))],
+            numbers[:min(100, len(numbers))] if numbers else None,
+            colors[:min(100, len(colors))] if colors else None
+        )
 
         m_small, m_big, m_tot, _ = _score_indicators(micro_indicators, weights)
         M_small, M_big, M_tot, _ = _score_indicators(macro_indicators, weights)
@@ -1032,12 +1041,20 @@ async def generate_prediction(
         upcoming_issue=upcoming_issue_id,
     )
 
+    now_ms = int(time.time() * 1000)
+    display_duration_sec = 15
+    expires_at_ms = now_ms + (display_duration_sec * 1000)
+
     return {
+        "prediction_id": upcoming_issue_id,
         "upcoming_issue_id": upcoming_issue_id,
         "prediction": prediction,
         "confidence": confidence,
         "confidence_level": confidence_level,
         "confluence_level": confluence_level,
+        "created_at_ms": now_ms,
+        "expires_at_ms": expires_at_ms,
+        "display_duration_sec": display_duration_sec,
         "shannon_entropy": shannon_entropy,
         "z_score": z_score,
         "small_score": round(norm_small, 3),
@@ -1053,7 +1070,7 @@ async def generate_prediction(
         "total_records_analyzed": len(rows),
         "status": "ACTIVE",
         "label": "STATISTICAL ANALYSIS — NOT A GUARANTEE",
-        "disclaimer": "This prediction is based on 10-indicator statistical ensemble analysis for the upcoming game period. Each draw is an independent random event.",
+        "disclaimer": "This prediction is based on 15-indicator statistical ensemble analysis for the upcoming game period. Each draw is an independent random event.",
     }
 
 
@@ -1096,6 +1113,8 @@ async def persist_original_prediction(session: AsyncSession, prediction_res: dic
                 confluence_level=prediction_res.get("confluence_level"),
                 agreeing_indicators=prediction_res.get("agreeing_indicators"),
                 active_indicators=prediction_res.get("active_indicators"),
+                created_at_ms=prediction_res.get("created_at_ms"),
+                expires_at_ms=prediction_res.get("expires_at_ms"),
                 created_at=datetime.now(timezone.utc),
             ).on_conflict_do_nothing(index_elements=["issue_id"])
             await session.execute(stmt)
@@ -1110,6 +1129,8 @@ async def persist_original_prediction(session: AsyncSession, prediction_res: dic
                     confluence_level=prediction_res.get("confluence_level"),
                     agreeing_indicators=prediction_res.get("agreeing_indicators"),
                     active_indicators=prediction_res.get("active_indicators"),
+                    created_at_ms=prediction_res.get("created_at_ms"),
+                    expires_at_ms=prediction_res.get("expires_at_ms"),
                     created_at=datetime.now(timezone.utc),
                 )
                 session.add(ep)
