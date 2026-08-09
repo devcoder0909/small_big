@@ -39,15 +39,18 @@ def get_async_engine():
             .replace("&ssl=false", "")
         )
 
-    return create_async_engine(
-        url,
-        connect_args=connect_args,
-        pool_pre_ping=True,
-        pool_size=settings.db_pool_size,
-        max_overflow=settings.db_max_overflow,
-        pool_recycle=settings.db_pool_recycle,
-        echo=settings.app_env == "development",
-    )
+    engine_kwargs = {
+        "connect_args": connect_args,
+        "pool_pre_ping": True,
+        "pool_recycle": settings.db_pool_recycle,
+        "echo": settings.app_env == "development",
+    }
+
+    if "sqlite" not in url:
+        engine_kwargs["pool_size"] = settings.db_pool_size
+        engine_kwargs["max_overflow"] = settings.db_max_overflow
+
+    return create_async_engine(url, **engine_kwargs)
 
 
 def get_sync_engine():
