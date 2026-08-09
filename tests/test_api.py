@@ -39,3 +39,25 @@ async def test_unauthorized_access(db_session):
         assert response.status_code == 401
 
     app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_public_minimal_ui_and_prediction(db_session):
+    """Test public UI endpoint / and public prediction API endpoint."""
+    async def override_get_session():
+        yield db_session
+
+    app.dependency_overrides[get_session] = override_get_session
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        res_ui = await client.get("/")
+        assert res_ui.status_code == 200
+        assert "LIVE PREDICTION" in res_ui.text
+
+        res_pred = await client.get("/api/v1/public/prediction")
+        assert res_pred.status_code == 200
+        data = res_pred.json()
+        assert "status" in data
+
+    app.dependency_overrides.clear()

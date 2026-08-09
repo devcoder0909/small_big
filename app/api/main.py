@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core import get_settings
 from app.core.logging import setup_logging
-from app.api.routes import health, results, analytics, admin
+from app.api.routes import health, results, analytics, admin, public
 
 
 @asynccontextmanager
@@ -42,6 +42,7 @@ def create_app() -> FastAPI:
     )
 
     # Include routers
+    app.include_router(public.router)
     app.include_router(health.router)
     app.include_router(results.router, prefix="/api/v1")
     app.include_router(analytics.router, prefix="/api/v1")
