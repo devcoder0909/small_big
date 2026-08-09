@@ -1,10 +1,12 @@
 """Raw response storage model."""
 
 from datetime import datetime, timezone
-from sqlalchemy import BigInteger, Text, DateTime, ForeignKey
+from sqlalchemy import BigInteger, Text, DateTime, ForeignKey, JSON
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
-from app.models.base import Base
+from app.models.base import Base, BIGINT_PK
+
+JSON_TYPE = JSON().with_variant(JSONB, "postgresql")
 
 
 class RawResponse(Base):
@@ -12,17 +14,18 @@ class RawResponse(Base):
 
     __tablename__ = "raw_responses"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BIGINT_PK, primary_key=True, autoincrement=True)
     source_request_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("source_requests.id"), nullable=False
     )
     received_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
-    payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    payload: Mapped[dict] = mapped_column(JSON_TYPE, nullable=False)
     payload_hash: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
     )
+

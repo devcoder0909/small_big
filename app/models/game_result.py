@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 from sqlalchemy import BigInteger, Boolean, Integer, Text, DateTime, Index, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
-from app.models.base import Base
+from app.models.base import Base, BIGINT_PK
 
 
 class GameResult(Base):
@@ -23,7 +23,7 @@ class GameResult(Base):
         Index("idx_game_results_number", "result_number"),
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BIGINT_PK, primary_key=True, autoincrement=True)
 
     # Unique game identifier from source — PRIMARY LOGICAL KEY
     issue_id: Mapped[str] = mapped_column(Text, nullable=False, unique=True)

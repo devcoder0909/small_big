@@ -174,9 +174,11 @@ async def upsert_batch(
     }
 
 
+from sqlalchemy import select, func, text
+
 async def get_total_record_count(session: AsyncSession) -> int:
     """Get total count of game results in the database."""
     result = await session.execute(
-        select(text("COUNT(*)")).select_from(GameResult.__table__)
+        select(func.count()).select_from(GameResult)
     )
     return result.scalar() or 0

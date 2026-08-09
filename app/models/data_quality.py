@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 from sqlalchemy import BigInteger, Text, DateTime, Boolean, Index
 from sqlalchemy.orm import Mapped, mapped_column
-from app.models.base import Base
+from app.models.base import Base, BIGINT_PK
 
 
 class DataQualityEvent(Base):
@@ -15,7 +15,7 @@ class DataQualityEvent(Base):
         Index("idx_data_quality_event_type", "event_type"),
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BIGINT_PK, primary_key=True, autoincrement=True)
     event_type: Mapped[str] = mapped_column(Text, nullable=False)
     # Types: missing_issue, duplicate_issue, invalid_result,
     #        timestamp_anomaly, api_failure, parse_failure,
