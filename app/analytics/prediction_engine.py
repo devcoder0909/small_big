@@ -1021,6 +1021,21 @@ async def generate_prediction(
         norm_small = 0.5
         norm_big = 0.5
 
+    # Justified Abstention Mode: If signal disagreement is extreme (< 2% margin), refrain from forced coin-flip
+    if abs(norm_small - norm_big) < 0.020:
+        return {
+            "upcoming_issue_id": str(int(latest_issue) + 1) if latest_issue else None,
+            "prediction": None,
+            "confidence": 0,
+            "status": "INSUFFICIENT_DATA",
+            "message": "Extreme signal disagreement — statistical edge insufficient for reliable prediction",
+            "shannon_entropy": shannon_entropy,
+            "z_score": z_score,
+            "indicators": indicators,
+            "total_records_analyzed": len(rows),
+            "label": "STATISTICAL ANALYSIS — NOT A GUARANTEE",
+        }
+
     # Final decision
     if norm_small > norm_big:
         prediction = "SMALL"
