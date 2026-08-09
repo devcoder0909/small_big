@@ -1,4 +1,4 @@
-"""Public routes — Superfast lightweight prediction UI with live countdown."""
+"""Public routes — Superfast lightweight prediction UI with live countdown and side-by-side prediction history."""
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import HTMLResponse
@@ -20,49 +20,54 @@ HTML_PAGE = """<!DOCTYPE html>
   <title>WinGo Predictor</title>
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
-    body{background:#0a0a0f;color:#ddd;font-family:system-ui,-apple-system,sans-serif;padding:12px;min-height:100vh}
-    .c{max-width:400px;margin:0 auto}
-    h1{font-size:14px;text-align:center;color:#888;letter-spacing:2px;text-transform:uppercase;padding:8px 0}
-    .card{background:#111;border:1px solid #1e1e2e;border-radius:10px;padding:14px;margin-bottom:10px}
+    body{background:#0a0a0f;color:#ddd;font-family:system-ui,-apple-system,sans-serif;padding:10px;min-height:100vh}
+    .c{max-width:420px;margin:0 auto}
+    h1{font-size:14px;text-align:center;color:#888;letter-spacing:2px;text-transform:uppercase;padding:6px 0}
+    .card{background:#111;border:1px solid #1e1e2e;border-radius:10px;padding:12px;margin-bottom:8px}
     .timer{text-align:center}
-    .timer .t{font-size:36px;font-weight:700;color:#ffd700;font-variant-numeric:tabular-nums;letter-spacing:2px}
-    .timer .bar{height:3px;background:#1a1a2e;border-radius:2px;margin-top:8px}
+    .timer .lbl{font-size:10px;color:#777;text-transform:uppercase;letter-spacing:1.5px;font-weight:700}
+    .timer .t{font-size:36px;font-weight:700;color:#ffd700;font-variant-numeric:tabular-nums;letter-spacing:2px;margin:2px 0}
+    .timer .bar{height:3px;background:#1a1a2e;border-radius:2px;margin-top:6px}
     .timer .fill{height:100%;background:#ffd700;border-radius:2px;transition:width .3s}
-    .timer .p{font-size:11px;color:#555;margin-top:6px;font-variant-numeric:tabular-nums}
+    .timer .p{font-size:11px;color:#666;margin-top:6px;font-variant-numeric:tabular-nums}
     .pred{text-align:center}
-    .pred .lbl{font-size:11px;color:#666;text-transform:uppercase;letter-spacing:2px}
-    .pred .sig{font-size:56px;font-weight:900;line-height:1.1;margin:4px 0}
+    .pred .lbl{font-size:10px;color:#777;text-transform:uppercase;letter-spacing:1.5px;font-weight:700}
+    .pred .sig{font-size:54px;font-weight:900;line-height:1.1;margin:2px 0}
     .pred .sig.big{color:#ff4d6a}
     .pred .sig.small{color:#4da6ff}
-    .pred .sig.wait{color:#444;font-size:28px}
-    .pred .conf{font-size:13px;color:#666;margin-top:4px}
+    .pred .sig.wait{color:#444;font-size:26px}
+    .pred .conf{font-size:12px;color:#666;margin-top:2px}
     .pred .conf b{color:#ddd}
-    .badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;margin-left:6px}
+    .badge{display:inline-block;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:700;margin-left:4px}
     .badge.h{background:#00d68f22;color:#00d68f}
     .badge.m{background:#ffd70022;color:#ffd700}
     .badge.l{background:#66666622;color:#888}
-    .stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px}
-    .stat{background:#111;border:1px solid #1e1e2e;border-radius:8px;padding:10px 6px;text-align:center}
-    .stat .v{font-size:16px;font-weight:700;font-variant-numeric:tabular-nums}
+    .stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px}
+    .stat{background:#111;border:1px solid #1e1e2e;border-radius:8px;padding:8px 4px;text-align:center}
+    .stat .v{font-size:15px;font-weight:700;font-variant-numeric:tabular-nums}
     .stat .v.g{color:#00d68f}.stat .v.y{color:#ffd700}.stat .v.b{color:#4da6ff}
-    .stat .l{font-size:9px;color:#555;text-transform:uppercase;letter-spacing:1px;margin-top:2px}
-    .hdr{display:flex;justify-content:space-between;align-items:center;padding-bottom:8px;border-bottom:1px solid #1a1a2e;margin-bottom:6px}
-    .hdr span{font-size:11px;color:#555;text-transform:uppercase;letter-spacing:1px}
-    .hdr .pct{color:#00d68f;font-weight:700}
-    .row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #0e0e18}
+    .stat .l{font-size:9px;color:#555;text-transform:uppercase;letter-spacing:1px;margin-top:1px}
+    .hdr{display:flex;justify-content:space-between;align-items:center;padding-bottom:6px;border-bottom:1px solid #1a1a2e;margin-bottom:4px}
+    .hdr span{font-size:10px;color:#777;text-transform:uppercase;letter-spacing:1px;font-weight:700}
+    .hdr .pct{color:#00d68f;font-weight:700;font-size:11px}
+    .row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #0e0e18}
     .row:last-child{border:none}
-    .row .left{display:flex;align-items:center;gap:8px}
-    .num{width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:6px;font-weight:700;font-size:13px}
+    .row .left{display:flex;align-items:center;gap:6px}
+    .num{width:26px;height:26px;display:flex;align-items:center;justify-content:center;border-radius:5px;font-weight:700;font-size:12px}
     .num.rb{background:#ff4d6a22;color:#ff4d6a}
     .num.sb{background:#4da6ff22;color:#4da6ff}
     .info{display:flex;flex-direction:column}
     .info .id{font-size:10px;color:#555;font-variant-numeric:tabular-nums}
-    .info .sz{font-size:13px;font-weight:700}
+    .info .sz{font-size:12px;font-weight:700}
     .info .sz.big{color:#ff4d6a}.info .sz.small{color:#4da6ff}
-    .w{padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700}
-    .w.win{background:#00d68f18;color:#00d68f}
-    .w.loss{background:#ff4d6a18;color:#ff4d6a}
-    .dis{text-align:center;font-size:9px;color:#333;padding:8px}
+    .mid{display:flex;flex-direction:column;align-items:center}
+    .mid .plbl{font-size:9px;color:#555;text-transform:uppercase;letter-spacing:0.5px}
+    .mid .psz{font-size:11px;font-weight:700}
+    .mid .psz.big{color:#ff4d6a}.mid .psz.small{color:#4da6ff}
+    .w{padding:3px 8px;border-radius:4px;font-size:10px;font-weight:700;white-space:nowrap}
+    .w.win{background:#00d68f18;color:#00d68f;border:1px solid #00d68f33}
+    .w.loss{background:#ff4d6a18;color:#ff4d6a;border:1px solid #ff4d6a33}
+    .dis{text-align:center;font-size:9px;color:#444;padding:6px}
     .urgent{animation:p .5s infinite}
     @keyframes p{50%{opacity:.4}}
   </style>
@@ -71,12 +76,13 @@ HTML_PAGE = """<!DOCTYPE html>
 <div class="c">
   <h1>WinGo Predictor</h1>
   <div class="card timer">
+    <div class="lbl">NEXT PREDICTION IN</div>
     <div class="t" id="tm">--:--</div>
     <div class="bar"><div class="fill" id="br" style="width:100%"></div></div>
-    <div class="p" id="pr">Period ---</div>
+    <div class="p" id="pr">Target Period #---</div>
   </div>
   <div class="card pred">
-    <div class="lbl">Next Prediction</div>
+    <div class="lbl">ENGINE NEXT PREDICTION</div>
     <div class="sig wait" id="sg">---</div>
     <div class="conf" id="cf">Loading...</div>
   </div>
@@ -86,10 +92,10 @@ HTML_PAGE = """<!DOCTYPE html>
     <div class="stat"><div class="v b" id="sr">-</div><div class="l">Records</div></div>
   </div>
   <div class="card">
-    <div class="hdr"><span>History & Accuracy</span><span class="pct" id="ap">--%</span></div>
-    <div id="hl"><div style="text-align:center;color:#444;font-size:12px;padding:16px">Loading...</div></div>
+    <div class="hdr"><span>Real History & Prediction Match</span><span class="pct" id="ap">--%</span></div>
+    <div id="hl"><div style="text-align:center;color:#444;font-size:12px;padding:16px">Loading real history...</div></div>
   </div>
-  <div class="dis">Statistical analysis. Each draw is random. Not a guarantee.</div>
+  <div class="dis">100% Real Scraped Data & Empirical Statistical Ensemble Engine.</div>
 </div>
 <script>
 function T(){
@@ -108,7 +114,7 @@ async function U(){
       var s=document.getElementById('sg');
       s.textContent=d.prediction;
       s.className='sig '+d.prediction.toLowerCase();
-      document.getElementById('pr').textContent='Period #'+(d.upcoming_issue_id||'').slice(-8);
+      document.getElementById('pr').textContent='Target Period #'+(d.upcoming_issue_id||'').slice(-8);
       var cp=(d.confidence*100).toFixed(1);
       var lv=d.confidence>=.75?'HIGH':d.confidence>=.55?'MED':'LOW';
       var lc=d.confidence>=.75?'h':d.confidence>=.55?'m':'l';
@@ -129,12 +135,27 @@ async function U(){
       ae.style.color=pct>=60?'#00d68f':pct>=40?'#ffd700':'#ff4d6a';
       document.getElementById('hl').innerHTML=h.map(function(i){
         var b=i.size==='BIG';
-        return '<div class="row"><div class="left"><div class="num '+(b?'rb':'sb')+'">'+i.result+'</div><div class="info"><span class="id">#'+i.issue_id.slice(-8)+'</span><span class="sz '+(b?'big':'small')+'">'+i.size+'</span></div></div><span class="w '+(i.is_win?'win':'loss')+'">'+(i.is_win?'✅ WIN':'❌ LOSS')+'</span></div>';
+        var pb=i.predicted_size==='BIG';
+        var winText=i.is_win ? '✅ WIN (' + i.predicted_size + ')' : '❌ LOSS (' + i.predicted_size + ')';
+        return '<div class="row">' +
+          '<div class="left">' +
+            '<div class="num '+(b?'rb':'sb')+'">'+i.result+'</div>' +
+            '<div class="info">' +
+              '<span class="id">#'+i.issue_id.slice(-8)+'</span>' +
+              '<span class="sz '+(b?'big':'small')+'">'+i.size+'</span>' +
+            '</div>' +
+          '</div>' +
+          '<div class="mid">' +
+            '<span class="plbl">PRED</span>' +
+            '<span class="psz '+(pb?'big':'small')+'">'+i.predicted_size+'</span>' +
+          '</div>' +
+          '<span class="w '+(i.is_win?'win':'loss')+'">'+winText+'</span>' +
+        '</div>';
       }).join('');
     }
   }catch(e){}
 }
-T();U();setInterval(T,250);setInterval(U,2000);
+T();U();setInterval(T,250);setInterval(U,1000);
 </script>
 </body>
 </html>
