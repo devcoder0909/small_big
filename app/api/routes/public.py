@@ -56,13 +56,13 @@ HTML_PAGE = """<!DOCTYPE html>
   <h1>WinGo Predictor Engine</h1>
 
   <div class="box" style="text-align:center">
-    <div class="lbl">NEXT PREDICTION IN</div>
+    <div class="lbl" id="timer-label">PERIOD CLOSES IN</div>
     <div class="timer-val" id="timer-text">00:30</div>
-    <div class="sub" id="target-issue">Target Period #---</div>
+    <div class="sub" id="target-issue">Period #---</div>
   </div>
 
   <div class="box" style="text-align:center">
-    <div class="lbl">CURRENT ENGINE PREDICTION</div>
+    <div class="lbl" id="pred-label">PREDICTION FOR PERIOD #---</div>
     <div class="pred-val wait" id="pred-text">---</div>
     <div class="conf-txt" id="conf-text">Loading prediction engine...</div>
   </div>
@@ -123,11 +123,16 @@ async function updateData() {
     }
 
     if (data && data.prediction) {
+      var periodId = (data.upcoming_issue_id || '').slice(-8);
+
+      document.getElementById('timer-label').textContent = 'PERIOD #' + periodId + ' CLOSES IN';
+      document.getElementById('target-issue').textContent = 'Next period prediction updates at 00:00';
+
+      document.getElementById('pred-label').textContent = 'PREDICTION FOR PERIOD #' + periodId;
+
       var predEl = document.getElementById('pred-text');
       predEl.textContent = data.prediction;
       predEl.className = 'pred-val ' + data.prediction.toLowerCase();
-
-      document.getElementById('target-issue').textContent = 'Target Period #' + (data.upcoming_issue_id || '').slice(-8);
 
       var confPct = (data.confidence * 100).toFixed(1);
       var level = data.confidence >= 0.75 ? 'HIGH' : data.confidence >= 0.55 ? 'MED' : 'LOW';
