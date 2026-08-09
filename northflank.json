@@ -1,0 +1,45 @@
+{
+  "name": "wingo-data-platform",
+  "description": "WinGo 30S 24/7 Data Collector & Historical Analytics Platform",
+  "services": [
+    {
+      "name": "wingo-collector",
+      "type": "deployment",
+      "dockerfile": "Dockerfile",
+      "command": "python -m app.collector",
+      "environment": {
+        "APP_ENV": "production",
+        "SOURCE_URL": "https://draw.ar-lottery01.com/WinGo/WinGo_30S/GetHistoryIssuePage.json",
+        "POLL_INTERVAL_SECONDS": "5",
+        "LOG_LEVEL": "INFO",
+        "LOG_FORMAT": "json"
+      }
+    },
+    {
+      "name": "wingo-api",
+      "type": "deployment",
+      "dockerfile": "Dockerfile",
+      "command": "uvicorn app.api.main:app --host 0.0.0.0 --port ${PORT:-8000}",
+      "ports": [
+        {
+          "name": "http",
+          "port": 8000,
+          "public": true
+        }
+      ],
+      "environment": {
+        "APP_ENV": "production",
+        "LOG_LEVEL": "INFO",
+        "LOG_FORMAT": "json"
+      }
+    }
+  ],
+  "jobs": [
+    {
+      "name": "database-maintenance",
+      "schedule": "0 2 * * *",
+      "dockerfile": "Dockerfile",
+      "command": "python -m app.database.maintenance"
+    }
+  ]
+}

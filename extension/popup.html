@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WinGo 30S Predictor</title>
+    <link rel="stylesheet" href="popup.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Top Bar -->
+        <div class="top-bar">
+            <div class="app-title">WIN GO 30S</div>
+            <div class="status-indicator" id="statusIndicator">
+                <span class="dot"></span>
+                <span class="status-text" id="statusText">LIVE</span>
+            </div>
+        </div>
+
+        <!-- Hero Prediction Box -->
+        <div class="prediction-box" id="predictionBox">
+            <div class="period-badge" id="upcomingPeriod">PERIOD: NEXT DRAW</div>
+            <div class="prediction-label">UPCOMING PREDICTION</div>
+            <div class="prediction-text" id="predictionText">—</div>
+            
+            <div class="meta-row">
+                <div class="confidence-badge" id="confidenceBadge">—% CONFIDENCE</div>
+                <div class="timer-badge" id="timerBadge">DRAW IN 30S</div>
+            </div>
+        </div>
+
+        <!-- Latest Draw Strip -->
+        <div class="last-draw-strip">
+            <span class="strip-label">LAST DRAW:</span>
+            <span class="strip-value" id="lastDrawValue">—</span>
+        </div>
+
+        <!-- Quick Settings -->
+        <div class="settings-toggle" id="settingsToggle">⚙ Config</div>
+        <div class="settings-panel hidden" id="settingsPanel">
+            <input type="text" id="apiUrl" placeholder="API URL" value="http://localhost:8000">
+            <input type="password" id="apiKey" placeholder="API Key">
+            <button id="saveSettings">Save</button>
+        </div>
+    </div>
+
+    <script src="api.js"></script>
+    <script src="popup.js"></script>
+</body>
+</html>

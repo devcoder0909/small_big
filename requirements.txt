@@ -1,0 +1,28 @@
+# Core
+fastapi==0.115.0
+uvicorn[standard]==0.30.0
+httpx==0.27.0
+pydantic==2.9.0
+pydantic-settings==2.5.0
+
+# Database
+sqlalchemy[asyncio]==2.0.35
+asyncpg==0.29.0
+psycopg2-binary==2.9.9
+alembic==1.13.0
+
+# Utilities
+python-dotenv==1.0.1
+structlog==24.4.0
+tenacity==9.0.0
+cachetools==5.5.0
+beautifulsoup4==4.12.3
+
+# Testing
+pytest==8.3.0
+pytest-asyncio==0.24.0
+pytest-httpx==0.30.0
+aiosqlite==0.20.0
+
+# Data export
+orjson==3.10.0

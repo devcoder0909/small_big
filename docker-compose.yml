@@ -1,0 +1,78 @@
+version: "3.9"
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: wingo_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Run Alembic migrations
+  migrations:
+    build: .
+    command: >
+      sh -c "pip install alembic psycopg2-binary &&
+             alembic upgrade head"
+    environment:
+      DATABASE_SYNC_URL: postgresql+psycopg2://postgres:postgres@postgres:5432/wingo_db
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/wingo_db
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # 24/7 Data Collector
+  collector:
+    build: .
+    command: python -m app.collector
+    environment:
+      APP_ENV: production
+      SOURCE_URL: https://draw.ar-lottery01.com/WinGo/WinGo_30S/GetHistoryIssuePage.json
+      POLL_INTERVAL_SECONDS: 5
+      REQUEST_TIMEOUT_SECONDS: 10
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/wingo_db
+      DATABASE_SYNC_URL: postgresql+psycopg2://postgres:postgres@postgres:5432/wingo_db
+      LOG_LEVEL: INFO
+      LOG_FORMAT: json
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+    restart: always
+
+  # FastAPI Server
+  api:
+    build: .
+    command: uvicorn app.api.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/wingo_db
+      DATABASE_SYNC_URL: postgresql+psycopg2://postgres:postgres@postgres:5432/wingo_db
+      API_KEY: ${API_KEY:-dev-api-key-change-me}
+      CORS_ORIGINS: "*"
+      LOG_LEVEL: INFO
+      LOG_FORMAT: json
+      PORT: 8000
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  pgdata:

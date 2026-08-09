@@ -1,0 +1,63 @@
+services:
+  # 1. Managed PostgreSQL Database
+  - type: postgres
+    name: wingo-db
+    plan: starter
+    databaseName: wingo_db
+    user: wingo_user
+    ipAllowList: []
+
+  # 2. FastAPI Web API Server
+  - type: web
+    name: wingo-api
+    env: docker
+    dockerfilePath: ./Dockerfile
+    dockerCommand: uvicorn app.api.main:app --host 0.0.0.0 --port $PORT
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: wingo-db
+          property: connectionString
+      - key: DATABASE_SYNC_URL
+        fromDatabase:
+          name: wingo-db
+          property: connectionString
+      - key: API_KEY
+        generateValue: true
+      - key: CORS_ORIGINS
+        value: "*"
+      - key: LOG_LEVEL
+        value: INFO
+      - key: LOG_FORMAT
+        value: json
+
+  # 3. 24/7 Data Collector Background Worker
+  - type: worker
+    name: wingo-collector
+    env: docker
+    dockerfilePath: ./Dockerfile
+    dockerCommand: python -m app.collector
+    plan: starter
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: SOURCE_URL
+        value: https://draw.ar-lottery01.com/WinGo/WinGo_30S/GetHistoryIssuePage.json
+      - key: POLL_INTERVAL_SECONDS
+        value: "5"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: wingo-db
+          property: connectionString
+      - key: DATABASE_SYNC_URL
+        fromDatabase:
+          name: wingo-db
+          property: connectionString
+      - key: LOG_LEVEL
+        value: INFO
+      - key: LOG_FORMAT
+        value: json
