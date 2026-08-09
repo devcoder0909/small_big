@@ -17,9 +17,15 @@ def get_async_engine():
 
     # Handle SSL query parameters for asyncpg driver
     if "asyncpg" in url and ("ssl=" in url or "sslmode=" in url):
-        # Convert sslmode query parameters to asyncpg connect_args
-        if "sslmode=require" in url or "ssl=require" in url or "ssl=true" in url:
-            connect_args["ssl"] = "require"
+        if "sslmode=disable" in url or "ssl=disable" in url or "ssl=false" in url:
+            connect_args["ssl"] = False
+        else:
+            import ssl
+            ssl_ctx = ssl.create_default_context()
+            ssl_ctx.check_hostname = False
+            ssl_ctx.verify_mode = ssl.CERT_NONE
+            connect_args["ssl"] = ssl_ctx
+
         url = (
             url.replace("?sslmode=require", "")
             .replace("&sslmode=require", "")
@@ -27,6 +33,10 @@ def get_async_engine():
             .replace("&ssl=require", "")
             .replace("?ssl=true", "")
             .replace("&ssl=true", "")
+            .replace("?sslmode=disable", "")
+            .replace("&sslmode=disable", "")
+            .replace("?ssl=false", "")
+            .replace("&ssl=false", "")
         )
 
     return create_async_engine(

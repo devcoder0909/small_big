@@ -580,6 +580,12 @@ async def generate_prediction(
         prediction = sizes[0]  # Tie-break: follow latest
         confidence = 0.50
 
+    # Count indicator agreement
+    agreeing = sum(
+        1 for ind in indicators.values()
+        if ind.get("prediction") == prediction and ind.get("confidence", 0) > 0
+    )
+
     # Micro-Macro Multi-Window Confluence Boosting (Micro 10 vs Medium 30 vs Macro 100)
     if len(sizes) >= 30:
         micro_sizes = sizes[:10]
@@ -597,12 +603,6 @@ async def generate_prediction(
         confidence_level = "MEDIUM"
     else:
         confidence_level = "LOW"
-
-    # Count indicator agreement
-    agreeing = sum(
-        1 for ind in indicators.values()
-        if ind.get("prediction") == prediction and ind.get("confidence", 0) > 0
-    )
 
     # Calculate upcoming issue ID
     upcoming_issue_id = None
