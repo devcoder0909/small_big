@@ -23,20 +23,35 @@ async def lifespan(app: FastAPI):
         from app.core.logging import get_logger
         get_logger(__name__).warning("db_schema_init_warning", error=str(e))
 
-    # Non-blocking background startup recovery (allows Uvicorn to bind port 8000 instantly)
+    # Non-blocking embedded 24/7 background collector loop
     import asyncio
-    async def _bg_startup_recovery():
+    async def _embedded_collector():
+        from app.collector.runner import CollectorRunner
+        from app.services.recovery_service import recover_missing_records
+        from app.core.database import async_session_factory
+        from app.core.logging import get_logger
+
+        logger = get_logger(__name__)
+        runner = CollectorRunner()
+
+        # 1. Startup recovery check
         try:
-            from app.services.recovery_service import recover_missing_records
-            from app.core.database import async_session_factory
             async with async_session_factory() as session:
                 async with session.begin():
-                    await recover_missing_records(session)
+                    rec = await recover_missing_records(session)
+                    logger.info("embedded_collector_recovery_done", result=rec)
         except Exception as e:
-            from app.core.logging import get_logger
-            get_logger(__name__).warning("auto_seed_history_warning", error=str(e))
+            logger.warning("embedded_collector_recovery_error", error=str(e))
 
-    asyncio.create_task(_bg_startup_recovery())
+        # 2. Perpetual 24/7 collection cycle (every 3 seconds)
+        while True:
+            try:
+                await runner.run_single_cycle()
+            except Exception as e:
+                logger.warning("embedded_collector_cycle_error", error=str(e))
+            await asyncio.sleep(3.0)
+
+    asyncio.create_task(_embedded_collector())
     yield
 
 
