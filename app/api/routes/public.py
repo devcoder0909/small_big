@@ -56,10 +56,10 @@ HTML_PAGE = """<!DOCTYPE html>
   <h1>WinGo Predictor Engine</h1>
 
   <div class="box" style="text-align:center">
-    <div class="lbl" id="pred-label">CURRENT PREDICTION (PERIOD #---)</div>
-    <div class="sub" id="sub-timer" style="font-size:10px;color:#00d68f;margin-bottom:6px">⚡ Live • Auto-Updates in --s</div>
+    <div class="lbl" id="pred-label" style="font-size:13px;font-weight:700;color:#aaa;margin-bottom:6px">PERIOD #---</div>
     <div class="pred-val wait" id="pred-text">---</div>
-    <div class="conf-txt" id="conf-text">Loading prediction engine...</div>
+    <div class="conf-txt" id="conf-text">Confidence: <b>--%</b> — <span class="badge low">LOW</span></div>
+    <div class="sub" id="sub-timer" style="font-size:11px;color:#00d68f;margin-top:8px;font-weight:600">Prediction active • Next prediction in: --s</div>
   </div>
 
   <div class="grid">
@@ -106,10 +106,10 @@ function updatePredictionCountdown() {
 
     if (timerEl) {
       if (remainingSec > 0) {
-        timerEl.textContent = 'Live • Auto-Updates in ' + remainingSec + 's';
+        timerEl.textContent = 'Prediction active • Next prediction in: ' + remainingSec + 's';
         timerEl.style.color = '#00d68f';
       } else {
-        timerEl.textContent = 'Live • Auto-Updates in 0s';
+        timerEl.textContent = 'Prediction updating • Next prediction in: 0s';
         timerEl.style.color = '#ffd700';
 
         // Immediate refetch when countdown hits 0s
@@ -120,7 +120,7 @@ function updatePredictionCountdown() {
       }
     }
   } else if (timerEl) {
-    timerEl.textContent = 'Live • Auto-Updates in --s';
+    timerEl.textContent = 'Prediction active • Next prediction in: --s';
     timerEl.style.color = '#00d68f';
   }
 }
@@ -144,7 +144,7 @@ async function updateData() {
       if (renderKey !== lastRenderedIssueId) {
         lastRenderedIssueId = renderKey;
 
-        document.getElementById('pred-label').textContent = 'CURRENT PREDICTION (PERIOD #' + currPeriodId + ')';
+        document.getElementById('pred-label').textContent = 'PERIOD #' + currPeriodId;
 
         var predEl = document.getElementById('pred-text');
         predEl.textContent = data.prediction;
@@ -152,10 +152,10 @@ async function updateData() {
 
         var confPct = (data.confidence * 100).toFixed(1);
         var isSuper = data.confluence_level === 'SUPER_CONFLUENCE';
-        var level = isSuper ? '★ SUPER CONFLUENCE' : (data.confidence >= 0.75 ? 'HIGH' : data.confidence >= 0.55 ? 'MED' : 'LOW');
-        var badgeClass = (isSuper || data.confidence >= 0.75) ? 'high' : data.confidence >= 0.55 ? 'med' : 'low';
+        var level = isSuper ? 'SUPER CONFLUENCE' : (data.confidence >= 0.72 ? 'HIGH' : data.confidence >= 0.56 ? 'MED' : 'LOW');
+        var badgeClass = (isSuper || data.confidence >= 0.72) ? 'high' : data.confidence >= 0.56 ? 'med' : 'low';
 
-        document.getElementById('conf-text').innerHTML = 'Confidence: <b>' + confPct + '%</b> <span class="badge ' + badgeClass + '">' + level + '</span>';
+        document.getElementById('conf-text').innerHTML = 'Confidence: <b>' + confPct + '%</b> — <span class="badge ' + badgeClass + '">' + level + '</span>';
         document.getElementById('stat-signals').textContent = (data.agreeing_indicators || '-') + '/' + (data.active_indicators || '-');
         document.getElementById('stat-records').textContent = data.total_records_analyzed || '-';
       }
