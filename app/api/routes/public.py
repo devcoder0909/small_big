@@ -147,8 +147,9 @@ async function updateData() {
       predEl.className = 'pred-val ' + data.prediction.toLowerCase();
 
       var confPct = (data.confidence * 100).toFixed(1);
-      var level = data.confidence >= 0.75 ? 'HIGH' : data.confidence >= 0.55 ? 'MED' : 'LOW';
-      var badgeClass = data.confidence >= 0.75 ? 'high' : data.confidence >= 0.55 ? 'med' : 'low';
+      var isSuper = data.confluence_level === 'SUPER_CONFLUENCE';
+      var level = isSuper ? '★ SUPER CONFLUENCE' : (data.confidence >= 0.75 ? 'HIGH' : data.confidence >= 0.55 ? 'MED' : 'LOW');
+      var badgeClass = (isSuper || data.confidence >= 0.75) ? 'high' : data.confidence >= 0.55 ? 'med' : 'low';
 
       document.getElementById('conf-text').innerHTML = 'Confidence: <b>' + confPct + '%</b> <span class="badge ' + badgeClass + '">' + level + '</span>';
       document.getElementById('stat-signals').textContent = (data.active_indicators || '-') + '/' + (data.agreeing_indicators || '-');

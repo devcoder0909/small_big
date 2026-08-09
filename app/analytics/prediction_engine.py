@@ -852,11 +852,17 @@ async def generate_prediction(
         if micro_dir == prediction and macro_dir == prediction:
             confidence = round(min(0.96, confidence + 0.08), 3)
 
-    # Tier 2: Super-majority boost (7+ of 10 indicators agree)
-    if agreeing >= 7 and active_indicators >= 8:
-        confidence = round(min(0.96, confidence + 0.10), 3)
+    confluence_level = "STANDARD"
+
+    # Tier 2: Super-majority confluence amplification (8+ of 12 indicators agree)
+    if agreeing >= 8 and active_indicators >= 9:
+        confidence = round(min(0.98, confidence + 0.12), 3)
+        confluence_level = "SUPER_CONFLUENCE"
+    elif agreeing >= 7 and active_indicators >= 8:
+        confidence = round(min(0.95, confidence + 0.08), 3)
+        confluence_level = "MAJORITY_CONFLUENCE"
     elif agreeing >= 6 and active_indicators >= 7:
-        confidence = round(min(0.93, confidence + 0.06), 3)
+        confidence = round(min(0.92, confidence + 0.05), 3)
 
     # Tier 3: Streak exhaustion emergency boost
     streak = _get_current_streak(sizes)
@@ -896,6 +902,7 @@ async def generate_prediction(
         "prediction": prediction,
         "confidence": confidence,
         "confidence_level": confidence_level,
+        "confluence_level": confluence_level,
         "shannon_entropy": shannon_entropy,
         "z_score": z_score,
         "small_score": round(norm_small, 3),
