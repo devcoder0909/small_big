@@ -65,11 +65,12 @@ HTML_PAGE = """<!DOCTYPE html>
     <div class="lbl" id="pred-label">CURRENT PREDICTION (PERIOD #---)</div>
     <div class="pred-val wait" id="pred-text">---</div>
     <div class="conf-txt" id="conf-text">Loading prediction engine...</div>
+    <div id="ai-reason-box" style="font-size:10px;color:#aaa;margin-top:6px;display:none;background:#1a1a24;padding:4px 8px;border-radius:4px"></div>
   </div>
 
   <div class="grid">
     <div class="g-box"><div class="g-val green" id="stat-wins">-</div><div class="g-lbl">Wins / 5</div></div>
-    <div class="g-box"><div class="g-val gold" id="stat-signals">-</div><div class="g-lbl">Signals</div></div>
+    <div class="g-box"><div class="g-val gold" id="stat-signals">-</div><div class="g-lbl">Active Signals</div></div>
     <div class="g-box"><div class="g-val blue" id="stat-records">-</div><div class="g-lbl">Records</div></div>
   </div>
 
@@ -99,6 +100,7 @@ HTML_PAGE = """<!DOCTYPE html>
 var timeOffsetMs = 0;
 var lastRemSec = -1;
 var currentNextIssueId = "";
+var lastRenderedIssueId = "";
 
 function updateTimer() {
   var serverNowMs = Date.now() + timeOffsetMs;
@@ -111,11 +113,11 @@ function updateTimer() {
     document.getElementById('target-issue').textContent = 'Next Prediction for Period #' + currentNextIssueId + ' in ' + remSec + 's';
   }
 
-  // Trigger instant refetch on period rollover and 3s after period rollover
+  // Trigger instant refetch on period rollover and sub-second retries
   if (lastRemSec !== -1 && remSec > lastRemSec) {
     updateData();
-    setTimeout(updateData, 2500);
-    setTimeout(updateData, 5000);
+    setTimeout(updateData, 1500);
+    setTimeout(updateData, 3500);
   }
   lastRemSec = remSec;
 }
@@ -140,20 +142,36 @@ async function updateData() {
         currentNextIssueId = "---";
       }
 
-      document.getElementById('pred-label').textContent = 'CURRENT PREDICTION (PERIOD #' + currPeriodId + ')';
+      // Check if DOM update is needed (skip if identical issue ID and prediction)
+      var renderKey = currPeriodId + '_' + data.prediction + '_' + (data.confidence || 0);
+      if (renderKey !== lastRenderedIssueId) {
+        lastRenderedIssueId = renderKey;
 
-      var predEl = document.getElementById('pred-text');
-      predEl.textContent = data.prediction;
-      predEl.className = 'pred-val ' + data.prediction.toLowerCase();
+        document.getElementById('pred-label').textContent = 'CURRENT PREDICTION (PERIOD #' + currPeriodId + ')';
 
-      var confPct = (data.confidence * 100).toFixed(1);
-      var isSuper = data.confluence_level === 'SUPER_CONFLUENCE';
-      var level = isSuper ? '★ SUPER CONFLUENCE' : (data.confidence >= 0.75 ? 'HIGH' : data.confidence >= 0.55 ? 'MED' : 'LOW');
-      var badgeClass = (isSuper || data.confidence >= 0.75) ? 'high' : data.confidence >= 0.55 ? 'med' : 'low';
+        var predEl = document.getElementById('pred-text');
+        predEl.textContent = data.prediction;
+        predEl.className = 'pred-val ' + data.prediction.toLowerCase();
 
-      document.getElementById('conf-text').innerHTML = 'Confidence: <b>' + confPct + '%</b> <span class="badge ' + badgeClass + '">' + level + '</span>';
-      document.getElementById('stat-signals').textContent = (data.active_indicators || '-') + '/' + (data.agreeing_indicators || '-');
-      document.getElementById('stat-records').textContent = data.total_records_analyzed || '-';
+        var confPct = (data.confidence * 100).toFixed(1);
+        var isSuper = data.confluence_level === 'SUPER_CONFLUENCE';
+        var level = isSuper ? '★ SUPER CONFLUENCE' : (data.confidence >= 0.75 ? 'HIGH' : data.confidence >= 0.55 ? 'MED' : 'LOW');
+        var badgeClass = (isSuper || data.confidence >= 0.75) ? 'high' : data.confidence >= 0.55 ? 'med' : 'low';
+
+        document.getElementById('conf-text').innerHTML = 'Confidence: <b>' + confPct + '%</b> <span class="badge ' + badgeClass + '">' + level + '</span>';
+        document.getElementById('stat-signals').textContent = (data.agreeing_indicators || '-') + '/' + (data.active_indicators || '-');
+        document.getElementById('stat-records').textContent = data.total_records_analyzed || '-';
+
+        // Render AI pattern reasoning if present
+        var aiBox = document.getElementById('ai-reason-box');
+        if (data.indicators && data.indicators.ai_pattern_reasoning && data.indicators.ai_pattern_reasoning.reason) {
+          var ai = data.indicators.ai_pattern_reasoning;
+          aiBox.style.display = 'block';
+          aiBox.innerHTML = '🤖 <b>AI Signal:</b> ' + ai.prediction + ' (' + Math.round((ai.confidence||0)*100) + '%) — ' + (ai.provider || 'Rotator');
+        } else {
+          aiBox.style.display = 'none';
+        }
+      }
     } else if (data && data.status === 'INSUFFICIENT_DATA') {
       document.getElementById('pred-text').textContent = 'WAIT';
       document.getElementById('pred-text').className = 'pred-val wait';
@@ -191,8 +209,8 @@ async function updateData() {
 
 updateTimer();
 updateData();
-setInterval(updateTimer, 200);
-setInterval(updateData, 1000);
+setInterval(updateTimer, 100);
+setInterval(updateData, 1500);
 </script>
 </body>
 </html>
