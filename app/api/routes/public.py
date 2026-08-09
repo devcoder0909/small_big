@@ -142,8 +142,18 @@ async def serve_minimal_ui():
 
 @router.get("/api/v1/public/prediction")
 async def get_public_prediction(session: AsyncSession = Depends(get_session)):
-    """Public unauthenticated prediction readout with last 5 real game draws."""
+    """Public unauthenticated prediction readout with on-demand data recovery."""
     prediction = await get_prediction(session)
+
+    # On-demand backfill if database is empty
+    if prediction.get("status") == "INSUFFICIENT_DATA":
+        try:
+            from app.services.recovery_service import recover_missing_records
+            await recover_missing_records(session)
+            prediction = await get_prediction(session)
+        except Exception:
+            pass
+
     recent = await get_results(session, limit=5)
     prediction["recent_history"] = recent.get("results", [])
     return prediction
