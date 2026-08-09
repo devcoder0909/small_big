@@ -7,6 +7,7 @@ from app.models.game_result import GameResult
 from app.models.data_quality import DataQualityEvent
 from app.models.system_heartbeat import SystemHeartbeat
 from app.models.analytics_snapshot import AnalyticsSnapshot
+from app.models.engine_prediction import EnginePrediction
 
 __all__ = [
     "Base",
@@ -16,4 +17,5 @@ __all__ = [
     "DataQualityEvent",
     "SystemHeartbeat",
     "AnalyticsSnapshot",
+    "EnginePrediction",
 ]

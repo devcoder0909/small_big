@@ -200,9 +200,13 @@ async def serve_minimal_ui():
 
 @router.get("/api/v1/public/prediction")
 async def get_public_prediction(session: AsyncSession = Depends(get_session)):
-    """Public unauthenticated prediction readout with recent accuracy verification."""
+    """Public unauthenticated prediction readout with immutable audit trail history."""
     prediction = await get_prediction(session)
     prediction["server_time_ms"] = int(time.time() * 1000)
+
+    # Immutable Audit Trail: Lock original prediction before draw occurs
+    if prediction.get("prediction") in ("SMALL", "BIG") and prediction.get("upcoming_issue_id"):
+        await persist_original_prediction(session, prediction)
 
     if prediction.get("status") == "INSUFFICIENT_DATA":
         import asyncio
@@ -221,5 +225,5 @@ async def get_public_prediction(session: AsyncSession = Depends(get_session)):
         select(GameResult).order_by(desc(GameResult.issue_id)).limit(20)
     )
     rows = rows_query.scalars().all()
-    prediction["recent_history"] = evaluate_recent_accuracy(rows)
+    prediction["recent_history"] = await evaluate_recent_accuracy(session, rows)
     return prediction

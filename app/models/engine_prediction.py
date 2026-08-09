@@ -1,0 +1,29 @@
+"""EnginePrediction model — immutable audit log of original predictions."""
+
+from datetime import datetime, timezone
+from sqlalchemy import Column, Integer, String, Float, DateTime, Index
+from app.models.base import Base
+
+
+class EnginePrediction(Base):
+    """
+    Immutable Engine Prediction Audit Trail Table.
+
+    Stores the ORIGINAL predicted value (SMALL or BIG) for every period ID
+    at the exact moment it is generated BEFORE the draw occurs.
+    Once stored, records in this table are permanently locked and NEVER updated or modified.
+    """
+    __tablename__ = "engine_predictions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    issue_id = Column(String(32), nullable=False, unique=True, index=True)
+    predicted_size = Column(String(10), nullable=False)
+    confidence = Column(Float, nullable=False)
+    confluence_level = Column(String(32), nullable=True)
+    agreeing_indicators = Column(Integer, nullable=True)
+    active_indicators = Column(Integer, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        Index("idx_engine_predictions_issue_id", "issue_id", unique=True),
+    )

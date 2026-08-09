@@ -21,9 +21,11 @@ IMPORTANT DISCLAIMERS:
 """
 
 import math
+from datetime import datetime, timezone
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.game_result import GameResult
+from app.models.engine_prediction import EnginePrediction
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -1069,22 +1071,76 @@ def _get_current_streak(sizes: list[str]) -> dict:
     return {"size": current, "length": length}
 
 
-def evaluate_recent_accuracy(rows: list) -> list[dict]:
+async def persist_original_prediction(session: AsyncSession, prediction_res: dict):
     """
-    Evaluate accuracy of the full 12-indicator ensemble on recent draws.
+    Persist original prediction into immutable audit trail table (engine_predictions).
 
-    For each of the last 5 draws, re-runs all 12 indicators on the data
-    that was available BEFORE that draw occurred, then checks if the
-    ensemble prediction matched the actual result.
+    ON CONFLICT DO NOTHING: Once a prediction for an upcoming_issue_id is generated and stored,
+    it is permanently locked and can NEVER be modified, updated, or rewritten retroactively.
+    """
+    upcoming_issue = prediction_res.get("upcoming_issue_id")
+    predicted_size = prediction_res.get("prediction")
+    if not upcoming_issue or not predicted_size or predicted_size not in ("SMALL", "BIG"):
+        return
+
+    bind = session.get_bind()
+    dialect_name = bind.dialect.name if bind else "postgresql"
+
+    try:
+        if dialect_name == "postgresql":
+            from sqlalchemy.dialects.postgresql import insert as pg_insert
+            stmt = pg_insert(EnginePrediction).values(
+                issue_id=upcoming_issue,
+                predicted_size=predicted_size,
+                confidence=float(prediction_res.get("confidence", 0.5)),
+                confluence_level=prediction_res.get("confluence_level"),
+                agreeing_indicators=prediction_res.get("agreeing_indicators"),
+                active_indicators=prediction_res.get("active_indicators"),
+                created_at=datetime.now(timezone.utc),
+            ).on_conflict_do_nothing(index_elements=["issue_id"])
+            await session.execute(stmt)
+        else:
+            exists_stmt = select(EnginePrediction.id).where(EnginePrediction.issue_id == upcoming_issue)
+            res = await session.execute(exists_stmt)
+            if not res.scalar_one_or_none():
+                ep = EnginePrediction(
+                    issue_id=upcoming_issue,
+                    predicted_size=predicted_size,
+                    confidence=float(prediction_res.get("confidence", 0.5)),
+                    confluence_level=prediction_res.get("confluence_level"),
+                    agreeing_indicators=prediction_res.get("agreeing_indicators"),
+                    active_indicators=prediction_res.get("active_indicators"),
+                    created_at=datetime.now(timezone.utc),
+                )
+                session.add(ep)
+    except Exception as err:
+        logger.warning("persist_original_prediction_failed", error=str(err))
+
+
+async def evaluate_recent_accuracy(session: AsyncSession, rows: list) -> list[dict]:
+    """
+    Evaluate accuracy of predictions using the IMMUTABLE AUDIT TRAIL.
+
+    Guarantees:
+    - Reads original predicted_size stored in engine_predictions table.
+    - Original predicted_size is NEVER modified, updated, or rewritten retroactively.
+    - Compares immutable original predicted_size against actual calculated_size.
 
     Args:
+        session: Active database session.
         rows: GameResult rows ordered by issue_id desc.
 
     Returns:
         List of dicts with issue_id, result, size, predicted_size, is_win.
     """
-    if len(rows) < 10:
+    if len(rows) < 2:
         return []
+
+    # Fetch stored immutable predictions for recent issue IDs
+    issue_ids = [r.issue_id for r in rows[:15]]
+    stmt = select(EnginePrediction).where(EnginePrediction.issue_id.in_(issue_ids))
+    res = await session.execute(stmt)
+    stored_preds = {ep.issue_id: ep for ep in res.scalars().all()}
 
     all_sizes = [r.calculated_size for r in rows]
     all_numbers = [r.result_number for r in rows]
@@ -1094,22 +1150,30 @@ def evaluate_recent_accuracy(rows: list) -> list[dict]:
     results = []
     for i in range(min(5, len(rows) - 5)):
         current_row = rows[i]
-        prior_sizes = all_sizes[i + 1 :]
-        prior_numbers = all_numbers[i + 1 :]
-        prior_colors = all_colors[i + 1 :]
-        if len(prior_sizes) < 5:
-            continue
+        issue_id = current_row.issue_id
 
-        indicators = _run_all_indicators(prior_sizes, prior_numbers, prior_colors)
-        small_score, big_score, total_weight, active = _score_indicators(
-            indicators, adaptive_weights
-        )
-
-        sum_active = small_score + big_score
-        if sum_active > 0:
-            pred = "SMALL" if small_score > big_score else "BIG"
+        if issue_id in stored_preds:
+            # === IMMUTABLE AUDIT TRAIL RECORD ===
+            # Exact original predicted_size stored before the draw occurred
+            pred = stored_preds[issue_id].predicted_size
         else:
-            pred = prior_sizes[0]
+            # Fallback for historical rows prior to table creation
+            prior_sizes = all_sizes[i + 1 :]
+            prior_numbers = all_numbers[i + 1 :]
+            prior_colors = all_colors[i + 1 :]
+            if len(prior_sizes) < 5:
+                continue
+
+            indicators = _run_all_indicators(prior_sizes, prior_numbers, prior_colors)
+            small_score, big_score, total_weight, active = _score_indicators(
+                indicators, adaptive_weights
+            )
+
+            sum_active = small_score + big_score
+            if sum_active > 0:
+                pred = "SMALL" if small_score > big_score else "BIG"
+            else:
+                pred = prior_sizes[0]
 
         is_win = pred == current_row.calculated_size
         results.append({
