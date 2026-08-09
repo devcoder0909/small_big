@@ -339,6 +339,16 @@ class CollectorRunner:
             source_url=self.settings.source_url,
         )
 
+        # Execute initial startup recovery to fetch any missing records during downtime
+        try:
+            from app.services.recovery_service import recover_missing_records
+            async with async_session_factory() as session:
+                async with session.begin():
+                    rec_result = await recover_missing_records(session)
+                    logger.info("startup_recovery_completed", result=rec_result)
+        except Exception as rec_err:
+            logger.warning("startup_recovery_failed", error=str(rec_err))
+
         while True:
             try:
                 await self.run_single_cycle()

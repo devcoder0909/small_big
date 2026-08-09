@@ -8,7 +8,7 @@ from app.core.logging import get_logger
 logger = get_logger(__name__)
 
 # Issue ID pattern: YYYYMMDD + game code + sequence number
-ISSUE_ID_PATTERN = re.compile(r"^\d{17,}$")
+ISSUE_ID_PATTERN = re.compile(r"^\d{4,}$")
 
 
 def validate_issue_id(issue_id: str) -> bool:
