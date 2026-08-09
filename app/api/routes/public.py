@@ -102,17 +102,16 @@ function updatePredictionCountdown() {
 
   if (currentPredictionData && currentPredictionData.expires_at_ms) {
     var remainingMs = Math.max(0, currentPredictionData.expires_at_ms - serverNowMs);
-    var remainingSec = Math.ceil(remainingMs / 1000);
+    var remainingSec = Math.floor(remainingMs / 1000);
 
     if (timerEl) {
-      if (remainingSec > 0) {
+      if (remainingMs > 0) {
         timerEl.textContent = 'Prediction active • Next prediction in: ' + remainingSec + 's';
         timerEl.style.color = '#00d68f';
       } else {
         timerEl.textContent = 'Prediction updating • Next prediction in: 0s';
         timerEl.style.color = '#ffd700';
 
-        // Immediate refetch when countdown hits 0s
         if (!isRefetching) {
           isRefetching = true;
           updateData().then(function() { isRefetching = false; });
@@ -134,12 +133,20 @@ async function updateData() {
       timeOffsetMs = data.server_time_ms - Date.now();
     }
 
-    if (data && data.prediction) {
+    if (data && data.prediction && data.upcoming_issue_id) {
+      // Out-of-order response protection: ignore older period responses
+      if (currentPredictionData && currentPredictionData.upcoming_issue_id) {
+        var newId = parseInt(data.upcoming_issue_id, 10);
+        var currId = parseInt(currentPredictionData.upcoming_issue_id, 10);
+        if (!isNaN(newId) && !isNaN(currId) && newId < currId) {
+          return;
+        }
+      }
+
       currentPredictionData = data;
       var rawIssue = data.upcoming_issue_id || '';
       var currPeriodId = rawIssue.slice(-8);
 
-      // Check if DOM update is needed (skip if identical issue ID and prediction)
       var renderKey = currPeriodId + '_' + data.prediction + '_' + (data.confidence || 0);
       if (renderKey !== lastRenderedIssueId) {
         lastRenderedIssueId = renderKey;
@@ -196,7 +203,7 @@ async function updateData() {
 
 updatePredictionCountdown();
 updateData();
-setInterval(updatePredictionCountdown, 200);
+setInterval(updatePredictionCountdown, 100);
 setInterval(updateData, 2000);
 </script>
 </body>

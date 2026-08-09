@@ -31,6 +31,9 @@ from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
+# Authoritative single prediction timestamp cache per period ID
+_PREDICTION_TIMESTAMP_CACHE: dict[str, tuple[int, int]] = {}
+
 # Base indicator weights for the 15 indicators
 DEFAULT_WEIGHTS = {
     "streak_reversal": 0.09,
@@ -1098,9 +1101,26 @@ async def generate_prediction(
         upcoming_issue=upcoming_issue_id,
     )
 
+    # Authoritative deterministic 15-second timestamp locking per period
     now_ms = int(time.time() * 1000)
     display_duration_sec = 15
     expires_at_ms = now_ms + (display_duration_sec * 1000)
+
+    if upcoming_issue_id:
+        if upcoming_issue_id in _PREDICTION_TIMESTAMP_CACHE:
+            now_ms, expires_at_ms = _PREDICTION_TIMESTAMP_CACHE[upcoming_issue_id]
+        else:
+            try:
+                stmt = select(EnginePrediction.created_at_ms, EnginePrediction.expires_at_ms).where(EnginePrediction.issue_id == upcoming_issue_id)
+                res = await session.execute(stmt)
+                row_ts = res.first()
+                if row_ts and isinstance(row_ts[0], int) and isinstance(row_ts[1], int):
+                    now_ms, expires_at_ms = row_ts[0], row_ts[1]
+                    _PREDICTION_TIMESTAMP_CACHE[upcoming_issue_id] = (now_ms, expires_at_ms)
+                else:
+                    _PREDICTION_TIMESTAMP_CACHE[upcoming_issue_id] = (now_ms, expires_at_ms)
+            except Exception:
+                _PREDICTION_TIMESTAMP_CACHE[upcoming_issue_id] = (now_ms, expires_at_ms)
 
     return {
         "prediction_id": upcoming_issue_id,
