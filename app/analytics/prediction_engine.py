@@ -760,8 +760,8 @@ def _calculate_adaptive_indicator_weights(sizes: list[str], base_weights: dict, 
         "kalman_filter_momentum": lambda s, n, c: _analyze_kalman_filter_momentum_indicator(n),
     }
 
-    indicator_wins = {name: 0 for name in base_weights}
-    indicator_votes = {name: 0 for name in base_weights}
+    indicator_wins = {name: 0 for name in eval_funcs}
+    indicator_votes = {name: 0 for name in eval_funcs}
 
     # Evaluate last 12 draws
     eval_depth = min(12, len(sizes) - 15)

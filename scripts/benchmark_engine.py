@@ -28,6 +28,7 @@ class MockRow:
         self.calculated_size = size
         self.issue_id = issue_id
         self.result_number = number
+        self.source_color = "red" if size == "BIG" else "green"
 
 
 async def run_benchmark():
@@ -92,8 +93,8 @@ async def run_benchmark():
     t_ngram = (time.perf_counter() - t0) / iterations * 1000
     print(f"7. Multi N-Gram Pattern (2-5):   {t_ngram:.4f} ms per call")
 
-    # 2. End-to-End Engine Benchmark (1,000 iterations)
-    e2e_iterations = 1000
+    # 2. End-to-End Engine Benchmark (10 iterations)
+    e2e_iterations = 10
     print(f"\n--- End-to-End Prediction Benchmark ({e2e_iterations:,} iterations) ---")
     t0 = time.perf_counter()
     for _ in range(e2e_iterations):
