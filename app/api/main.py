@@ -14,6 +14,14 @@ from app.api.routes import health, results, analytics, admin, public
 async def lifespan(app: FastAPI):
     """Application lifespan — setup and teardown."""
     setup_logging()
+    try:
+        from app.core.database import engine
+        from app.models.base import Base
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+    except Exception as e:
+        from app.core.logging import get_logger
+        get_logger(__name__).warning("db_schema_init_warning", error=str(e))
     yield
 
 
