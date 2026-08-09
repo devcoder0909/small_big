@@ -86,7 +86,7 @@ def _calculate_z_score(sizes: list[str]) -> tuple[float, float]:
 def _analyze_streak_indicator(sizes: list[str]) -> dict:
     """
     Empirical streak analysis.
-    Calculates actual historical break vs continuation frequencies for streaks of the current length.
+    Predicts streak continuation unless historical evidence empirically proves break ratio > 65%.
     """
     if len(sizes) < 10:
         return {"prediction": None, "confidence": 0, "reason": "insufficient_data"}
@@ -99,7 +99,7 @@ def _analyze_streak_indicator(sizes: list[str]) -> dict:
         else:
             break
 
-    # Calculate historical streaks and their outcomes
+    # Calculate historical streaks of this length and their actual outcomes
     continue_count = 0
     break_count = 0
 
@@ -119,47 +119,21 @@ def _analyze_streak_indicator(sizes: list[str]) -> dict:
 
     if total_observed >= 5:
         break_ratio = break_count / total_observed
-        if break_ratio > 0.55:
-            confidence = min(0.85, 0.50 + (break_ratio - 0.55) * 0.8)
+        if break_ratio > 0.65:
+            confidence = min(0.85, 0.50 + (break_ratio - 0.65) * 0.8)
             return {
                 "prediction": opposite,
                 "confidence": round(confidence, 3),
-                "reason": f"empirical_streak_reversal_ratio_{break_ratio:.2f}_n_{total_observed}",
-            }
-        elif break_ratio < 0.45:
-            confidence = min(0.80, 0.50 + (0.45 - break_ratio) * 0.8)
-            return {
-                "prediction": current,
-                "confidence": round(confidence, 3),
-                "reason": f"empirical_streak_continuation_ratio_{1-break_ratio:.2f}_n_{total_observed}",
+                "reason": f"empirical_streak_break_ratio_{break_ratio:.2f}_n_{total_observed}",
             }
 
-    # Fallback heuristic
-    streaks = []
-    s_len = 1
-    for i in range(1, len(sizes)):
-        if sizes[i] == sizes[i - 1]:
-            s_len += 1
-        else:
-            streaks.append(s_len)
-            s_len = 1
-    streaks.append(s_len)
-    avg_streak = sum(streaks) / len(streaks) if streaks else 2.0
-
-    ratio = streak_len / avg_streak if avg_streak > 0 else 1.0
-    if ratio >= 2.0:
-        confidence = min(0.82, 0.50 + (ratio - 2.0) * 0.15)
-        return {
-            "prediction": opposite,
-            "confidence": round(confidence, 3),
-            "reason": f"streak_len_{streak_len}_exceeds_avg_{avg_streak:.1f}",
-        }
-    else:
-        return {
-            "prediction": current,
-            "confidence": 0.45,
-            "reason": f"short_streak_{streak_len}",
-        }
+    # Streak continuation: long streaks persist more often than turn
+    conf = min(0.85, 0.55 + min(0.30, streak_len * 0.08))
+    return {
+        "prediction": current,
+        "confidence": round(conf, 3),
+        "reason": f"streak_continuation_length_{streak_len}",
+    }
 
 
 def _analyze_markov_transition_indicator(sizes: list[str]) -> dict:
