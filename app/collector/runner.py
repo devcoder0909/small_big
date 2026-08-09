@@ -177,12 +177,14 @@ class CollectorRunner:
 
         ids = sorted([r.issue_id for r in parsed_results])
 
+        has_gap = False
         for i in range(1, len(ids)):
             try:
                 prev_num = int(ids[i - 1])
                 curr_num = int(ids[i])
                 gap = curr_num - prev_num
                 if gap > 1:
+                    has_gap = True
                     for missing in range(prev_num + 1, curr_num):
                         logger.warning(
                             "missing_issue_detected",
@@ -199,6 +201,14 @@ class CollectorRunner:
                         )
             except ValueError:
                 pass
+
+        if has_gap:
+            try:
+                from app.services.recovery_service import recover_missing_records
+                rec_res = await recover_missing_records(session)
+                logger.info("inline_gap_recovery_completed", result=rec_res)
+            except Exception as rec_err:
+                logger.warning("inline_gap_recovery_failed", error=str(rec_err))
 
     async def run_single_cycle(self) -> dict:
         """

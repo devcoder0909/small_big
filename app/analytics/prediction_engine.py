@@ -1168,8 +1168,13 @@ async def persist_original_prediction(session: AsyncSession, prediction_res: dic
     if not upcoming_issue or not predicted_size or predicted_size not in ("SMALL", "BIG"):
         return
 
-    bind = session.get_bind()
-    dialect_name = bind.dialect.name if bind else "postgresql"
+    dialect_name = "postgresql"
+    try:
+        bind = session.get_bind()
+        if hasattr(bind, "dialect") and hasattr(bind.dialect, "name"):
+            dialect_name = bind.dialect.name
+    except Exception:
+        pass
 
     try:
         if dialect_name == "postgresql":
@@ -1245,7 +1250,7 @@ async def evaluate_recent_accuracy(session: AsyncSession, rows: list) -> list[di
     adaptive_weights = _calculate_adaptive_indicator_weights(all_sizes, DEFAULT_WEIGHTS, all_numbers, all_colors)
 
     results = []
-    for i in range(min(5, len(rows) - 5)):
+    for i in range(min(5, len(rows))):
         current_row = rows[i]
         issue_id = current_row.issue_id
 
