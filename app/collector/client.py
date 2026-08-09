@@ -37,6 +37,8 @@ class SourceClient:
         self.fallback_urls = [
             settings.source_url,
             "https://draw.ar-lottery01.com/WinGo/WinGo_30S/GetHistoryIssuePage.json",
+            "https://draw.ar-lottery02.com/WinGo/WinGo_30S/GetHistoryIssuePage.json",
+            "https://draw.ar-lottery03.com/WinGo/WinGo_30S/GetHistoryIssuePage.json",
         ]
         # Deduplicate while preserving order
         self.endpoints = list(dict.fromkeys(self.fallback_urls))
@@ -53,8 +55,7 @@ class SourceClient:
         self.headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
             "Accept": "application/json, text/plain, */*",
-            "Accept-Encoding": "gzip, deflate, br",
-            "Connection": "keep-alive",
+            "Accept-Language": "en-US,en;q=0.9",
         }
         self._client: httpx.AsyncClient | None = None
 
@@ -96,10 +97,7 @@ class SourceClient:
         last_status = None
 
         for endpoint in self.endpoints:
-            params = {"ts": ts}
-            if page_no > 1 or page_size != 10:
-                params["pageNo"] = str(page_no)
-                params["pageSize"] = str(page_size)
+            params = {"ts": str(ts)}
 
             for attempt in range(1, self.max_retries + 1):
                 try:
@@ -141,6 +139,7 @@ class SourceClient:
                     httpx.TimeoutException,
                     httpx.ConnectError,
                     httpx.NetworkError,
+                    httpx.DecodingError,
                 ) as e:
                     last_error = e
                     logger.warning(
