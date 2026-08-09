@@ -28,19 +28,20 @@ from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
-# Base indicator weights for the 11 indicators
+# Base indicator weights for the 12 indicators
 DEFAULT_WEIGHTS = {
-    "streak_reversal": 0.13,
-    "markov_transition": 0.15,
-    "stat_frequency": 0.11,
-    "ema_momentum": 0.09,
-    "pattern_match": 0.13,
-    "harmonic_periodicity": 0.06,
-    "bayesian_posterior": 0.08,
+    "streak_reversal": 0.12,
+    "markov_transition": 0.14,
+    "stat_frequency": 0.10,
+    "ema_momentum": 0.08,
+    "pattern_match": 0.12,
+    "harmonic_periodicity": 0.05,
+    "bayesian_posterior": 0.07,
     "volatility_regime": 0.05,
     "chi_square_skew": 0.06,
-    "runs_test": 0.06,
+    "runs_test": 0.05,
     "sequence_hash_miner": 0.08,
+    "digit_numeric_momentum": 0.08,
 }
 
 
@@ -548,8 +549,38 @@ def _analyze_sequence_hash_miner_indicator(sizes: list[str]) -> dict:
     return {"prediction": None, "confidence": 0, "reason": f"sequence_hash_split_{small_count}_vs_{big_count}"}
 
 
-def _run_all_indicators(sizes: list[str]) -> dict:
-    """Run all 11 statistical indicators and return the indicators dict."""
+def _analyze_digit_numeric_momentum_indicator(numbers: list[int] | None) -> dict:
+    """
+    Single-Digit Result Number Distribution & Mean Drift.
+    Analyzes actual single-digit draw numbers (0-4 SMALL vs 5-9 BIG).
+    If recent mean of single-digit numbers leans > 5.2 or < 3.8, votes on numeric momentum.
+    """
+    if not numbers or len(numbers) < 15:
+        return {"prediction": None, "confidence": 0, "reason": "insufficient_data"}
+
+    recent_15 = numbers[:15]
+    mean_val = sum(recent_15) / len(recent_15)
+
+    if mean_val > 5.2:
+        conf = min(0.86, 0.52 + (mean_val - 5.2) * 0.20)
+        return {
+            "prediction": "BIG",
+            "confidence": round(conf, 3),
+            "reason": f"digit_numeric_mean_high_{mean_val:.2f}",
+        }
+    elif mean_val < 3.8:
+        conf = min(0.86, 0.52 + (3.8 - mean_val) * 0.20)
+        return {
+            "prediction": "SMALL",
+            "confidence": round(conf, 3),
+            "reason": f"digit_numeric_mean_low_{mean_val:.2f}",
+        }
+
+    return {"prediction": None, "confidence": 0, "reason": f"digit_numeric_mean_balanced_{mean_val:.2f}"}
+
+
+def _run_all_indicators(sizes: list[str], numbers: list[int] | None = None) -> dict:
+    """Run all 12 statistical indicators and return the indicators dict."""
     return {
         "streak_reversal": _analyze_streak_indicator(sizes),
         "markov_transition": _analyze_markov_transition_indicator(sizes),
@@ -562,14 +593,15 @@ def _run_all_indicators(sizes: list[str]) -> dict:
         "chi_square_skew": _analyze_chi_square_goodness_of_fit_indicator(sizes),
         "runs_test": _analyze_runs_test_indicator(sizes),
         "sequence_hash_miner": _analyze_sequence_hash_miner_indicator(sizes),
+        "digit_numeric_momentum": _analyze_digit_numeric_momentum_indicator(numbers),
     }
 
 
-def _calculate_adaptive_indicator_weights(sizes: list[str], base_weights: dict) -> dict:
+def _calculate_adaptive_indicator_weights(sizes: list[str], base_weights: dict, numbers: list[int] | None = None) -> dict:
     """
     Self-Learning Adaptive Weighting Engine.
 
-    Backtests each of the 11 indicators on recent historical draws (last 15 draws)
+    Backtests each of the 12 indicators on recent historical draws (last 15 draws)
     to calculate real-time individual indicator win rates.
 
     - Hot indicators (win rate > 50%) receive up to 2.5x dynamic weight amplification.
@@ -580,17 +612,18 @@ def _calculate_adaptive_indicator_weights(sizes: list[str], base_weights: dict) 
 
     # Indicator single-eval mapping
     eval_funcs = {
-        "streak_reversal": _analyze_streak_indicator,
-        "markov_transition": _analyze_markov_transition_indicator,
-        "stat_frequency": _analyze_statistical_frequency_indicator,
-        "ema_momentum": _analyze_ema_momentum_indicator,
-        "pattern_match": _analyze_multi_ngram_pattern_indicator,
-        "harmonic_periodicity": _analyze_harmonic_periodicity_indicator,
-        "bayesian_posterior": _analyze_bayesian_posterior_indicator,
-        "volatility_regime": _analyze_volatility_regime_indicator,
-        "chi_square_skew": _analyze_chi_square_goodness_of_fit_indicator,
-        "runs_test": _analyze_runs_test_indicator,
-        "sequence_hash_miner": _analyze_sequence_hash_miner_indicator,
+        "streak_reversal": lambda s, n: _analyze_streak_indicator(s),
+        "markov_transition": lambda s, n: _analyze_markov_transition_indicator(s),
+        "stat_frequency": lambda s, n: _analyze_statistical_frequency_indicator(s),
+        "ema_momentum": lambda s, n: _analyze_ema_momentum_indicator(s),
+        "pattern_match": lambda s, n: _analyze_multi_ngram_pattern_indicator(s),
+        "harmonic_periodicity": lambda s, n: _analyze_harmonic_periodicity_indicator(s),
+        "bayesian_posterior": lambda s, n: _analyze_bayesian_posterior_indicator(s),
+        "volatility_regime": lambda s, n: _analyze_volatility_regime_indicator(s),
+        "chi_square_skew": lambda s, n: _analyze_chi_square_goodness_of_fit_indicator(s),
+        "runs_test": lambda s, n: _analyze_runs_test_indicator(s),
+        "sequence_hash_miner": lambda s, n: _analyze_sequence_hash_miner_indicator(s),
+        "digit_numeric_momentum": lambda s, n: _analyze_digit_numeric_momentum_indicator(n),
     }
 
     indicator_wins = {name: 0 for name in base_weights}
@@ -601,9 +634,10 @@ def _calculate_adaptive_indicator_weights(sizes: list[str], base_weights: dict) 
     for i in range(1, eval_depth + 1):
         actual = sizes[i - 1]
         prior_slice = sizes[i:]
+        prior_num_slice = numbers[i:] if numbers and len(numbers) > i else None
 
         for name, fn in eval_funcs.items():
-            res = fn(prior_slice)
+            res = fn(prior_slice, prior_num_slice)
             pred = res.get("prediction")
             if pred in ("SMALL", "BIG"):
                 indicator_votes[name] += 1
@@ -699,14 +733,15 @@ async def generate_prediction(
         }
 
     sizes = [row.calculated_size for row in rows]
+    numbers = [row.result_number for row in rows]
     latest_issue = rows[0].issue_id if rows else None
 
     # Calculate sequence Shannon Entropy & Z-Score
     shannon_entropy = _calculate_shannon_entropy(sizes[:50])
     z_score, p_small = _calculate_z_score(sizes)
 
-    # Run all 10 indicators
-    indicators = _run_all_indicators(sizes)
+    # Run all 12 indicators
+    indicators = _run_all_indicators(sizes, numbers)
 
     # Fetch AI Pattern Reasoning via Key Rotation (Groq, OpenRouter, Gemini)
     # Pass full indicator breakdown to AI for contextual reasoning
@@ -736,7 +771,7 @@ async def generate_prediction(
         logger.warning("ai_rotator_integration_warning", error=str(ai_err))
 
     # Self-Learning Adaptive Weighting based on real-time win-streak accuracy
-    weights = _calculate_adaptive_indicator_weights(sizes, DEFAULT_WEIGHTS)
+    weights = _calculate_adaptive_indicator_weights(sizes, DEFAULT_WEIGHTS, numbers)
 
     # Adaptive Dynamic Weighting based on Shannon Entropy & Z-Score
     if shannon_entropy < 0.90:
@@ -915,12 +950,13 @@ def evaluate_recent_accuracy(rows: list) -> list[dict]:
     for i in range(min(5, len(rows) - 5)):
         current_row = rows[i]
         prior_sizes = [r.calculated_size for r in rows[i + 1 :]]
+        prior_numbers = [r.result_number for r in rows[i + 1 :]]
         if len(prior_sizes) < 5:
             continue
 
-        # Run full 10-indicator ensemble on prior data with self-learning adaptive weights
-        indicators = _run_all_indicators(prior_sizes)
-        weights = _calculate_adaptive_indicator_weights(prior_sizes, DEFAULT_WEIGHTS)
+        # Run full 12-indicator ensemble on prior data with self-learning adaptive weights
+        indicators = _run_all_indicators(prior_sizes, prior_numbers)
+        weights = _calculate_adaptive_indicator_weights(prior_sizes, DEFAULT_WEIGHTS, prior_numbers)
         small_score, big_score, total_weight, active = _score_indicators(
             indicators, weights
         )
