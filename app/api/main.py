@@ -16,7 +16,7 @@ async def lifespan(app: FastAPI):
     setup_logging()
     try:
         from app.core.database import engine
-        from app.models.base import Base
+        from app.models import Base
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
     except Exception as e:

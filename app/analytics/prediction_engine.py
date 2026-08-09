@@ -1190,10 +1190,14 @@ async def evaluate_recent_accuracy(session: AsyncSession, rows: list) -> list[di
         return []
 
     # Fetch stored immutable predictions for recent issue IDs
-    issue_ids = [r.issue_id for r in rows[:15]]
-    stmt = select(EnginePrediction).where(EnginePrediction.issue_id.in_(issue_ids))
-    res = await session.execute(stmt)
-    stored_preds = {ep.issue_id: ep for ep in res.scalars().all()}
+    stored_preds = {}
+    try:
+        issue_ids = [r.issue_id for r in rows[:15]]
+        stmt = select(EnginePrediction).where(EnginePrediction.issue_id.in_(issue_ids))
+        res = await session.execute(stmt)
+        stored_preds = {ep.issue_id: ep for ep in res.scalars().all()}
+    except Exception as err:
+        logger.warning("fetch_stored_predictions_warning", error=str(err))
 
     all_sizes = [r.calculated_size for r in rows]
     all_numbers = [r.result_number for r in rows]

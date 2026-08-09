@@ -213,29 +213,54 @@ async def serve_minimal_ui():
 @router.get("/api/v1/public/prediction")
 async def get_public_prediction(session: AsyncSession = Depends(get_session)):
     """Public unauthenticated prediction readout with immutable audit trail history."""
-    prediction = await get_prediction(session)
-    prediction["server_time_ms"] = int(time.time() * 1000)
+    try:
+        prediction = await get_prediction(session)
+        if not prediction:
+            prediction = {}
+        prediction["server_time_ms"] = int(time.time() * 1000)
 
-    # Immutable Audit Trail: Lock original prediction before draw occurs
-    if prediction.get("prediction") in ("SMALL", "BIG") and prediction.get("upcoming_issue_id"):
-        await persist_original_prediction(session, prediction)
-
-    if prediction.get("status") == "INSUFFICIENT_DATA":
-        import asyncio
-        async def _bg_seed():
+        # Immutable Audit Trail: Lock original prediction before draw occurs
+        if prediction.get("prediction") in ("SMALL", "BIG") and prediction.get("upcoming_issue_id"):
             try:
-                from app.core.database import async_session_factory
-                from app.services.recovery_service import recover_missing_records
-                async with async_session_factory() as s:
-                    async with s.begin():
-                        await recover_missing_records(s)
-            except Exception:
-                pass
-        asyncio.create_task(_bg_seed())
+                await persist_original_prediction(session, prediction)
+            except Exception as e:
+                from app.core.logging import get_logger
+                get_logger(__name__).warning("persist_original_prediction_route_error", error=str(e))
 
-    rows_query = await session.execute(
-        select(GameResult).order_by(desc(GameResult.issue_id)).limit(20)
-    )
-    rows = rows_query.scalars().all()
-    prediction["recent_history"] = await evaluate_recent_accuracy(session, rows)
+        if prediction.get("status") == "INSUFFICIENT_DATA":
+            import asyncio
+            async def _bg_seed():
+                try:
+                    from app.core.database import async_session_factory
+                    from app.services.recovery_service import recover_missing_records
+                    async with async_session_factory() as s:
+                        async with s.begin():
+                            await recover_missing_records(s)
+                except Exception:
+                    pass
+            asyncio.create_task(_bg_seed())
+
+        try:
+            rows_query = await session.execute(
+                select(GameResult).order_by(desc(GameResult.issue_id)).limit(20)
+            )
+            rows = rows_query.scalars().all()
+            prediction["recent_history"] = await evaluate_recent_accuracy(session, rows)
+        except Exception as err:
+            from app.core.logging import get_logger
+            get_logger(__name__).warning("evaluate_recent_accuracy_route_error", error=str(err))
+            prediction["recent_history"] = []
+
+        return prediction
+    except Exception as exc:
+        from app.core.logging import get_logger
+        get_logger(__name__).error("public_prediction_endpoint_error", error=str(exc))
+        return {
+            "status": "INSUFFICIENT_DATA",
+            "prediction": None,
+            "confidence": 0,
+            "message": "System initializing or recovering data",
+            "server_time_ms": int(time.time() * 1000),
+            "recent_history": [],
+        }
     return prediction

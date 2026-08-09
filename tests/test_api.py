@@ -1,6 +1,7 @@
 """Tests for FastAPI API endpoints."""
 
 import pytest
+from unittest.mock import AsyncMock
 from httpx import AsyncClient, ASGITransport
 from app.api.main import app
 from app.api.dependencies import get_session
@@ -59,5 +60,27 @@ async def test_public_minimal_ui_and_prediction(db_session):
         assert res_pred.status_code == 200
         data = res_pred.json()
         assert "status" in data
+
+    app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_public_prediction_500_resilience():
+    """Regression test: verify /api/v1/public/prediction NEVER returns 500 on database error."""
+    mock_session = AsyncMock()
+    mock_session.execute.side_effect = Exception("Database connection failure simulation")
+
+    async def throwing_get_session():
+        yield mock_session
+
+    app.dependency_overrides[get_session] = throwing_get_session
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        res_pred = await client.get("/api/v1/public/prediction")
+        assert res_pred.status_code == 200
+        data = res_pred.json()
+        assert data["status"] == "INSUFFICIENT_DATA"
+        assert "server_time_ms" in data
 
     app.dependency_overrides.clear()
