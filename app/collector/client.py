@@ -36,7 +36,6 @@ class SourceClient:
         self.primary_url = settings.source_url
         self.fallback_urls = [
             settings.source_url,
-            settings.source_api_url,
             "https://draw.ar-lottery01.com/WinGo/WinGo_30S/GetHistoryIssuePage.json",
         ]
         # Deduplicate while preserving order
