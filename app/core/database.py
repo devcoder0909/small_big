@@ -12,8 +12,26 @@ from app.core import get_settings
 def get_async_engine():
     """Create async database engine with connection pooling."""
     settings = get_settings()
+    url = settings.database_url
+    connect_args = {}
+
+    # Handle SSL query parameters for asyncpg driver
+    if "asyncpg" in url and ("ssl=" in url or "sslmode=" in url):
+        # Convert sslmode query parameters to asyncpg connect_args
+        if "sslmode=require" in url or "ssl=require" in url or "ssl=true" in url:
+            connect_args["ssl"] = "require"
+        url = (
+            url.replace("?sslmode=require", "")
+            .replace("&sslmode=require", "")
+            .replace("?ssl=require", "")
+            .replace("&ssl=require", "")
+            .replace("?ssl=true", "")
+            .replace("&ssl=true", "")
+        )
+
     return create_async_engine(
-        settings.database_url,
+        url,
+        connect_args=connect_args,
         pool_pre_ping=True,
         pool_size=settings.db_pool_size,
         max_overflow=settings.db_max_overflow,
