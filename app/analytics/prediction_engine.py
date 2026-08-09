@@ -899,6 +899,31 @@ async def generate_prediction(
             "label": "STATISTICAL ANALYSIS — NOT A GUARANTEE",
         }
 
+    # === PRE-PREDICTION DATA GATE: STRICT CHRONOLOGICAL CONTINUITY CHECK ===
+    if len(rows) >= 2:
+        for i in range(min(10, len(rows) - 1)):
+            try:
+                curr_id = int(rows[i].issue_id)
+                prev_id = int(rows[i + 1].issue_id)
+                if curr_id - prev_id != 1:
+                    logger.warning(
+                        "pre_prediction_data_gate_gap_detected",
+                        curr_issue=rows[i].issue_id,
+                        prev_issue=rows[i + 1].issue_id,
+                        gap_count=curr_id - prev_id - 1,
+                    )
+                    return {
+                        "upcoming_issue_id": None,
+                        "prediction": None,
+                        "confidence": 0,
+                        "status": "INSUFFICIENT_DATA",
+                        "message": f"Historical data gap detected between period #{prev_id} and #{curr_id}",
+                        "total_records_analyzed": len(rows),
+                        "label": "STATISTICAL ANALYSIS — NOT A GUARANTEE",
+                    }
+            except (ValueError, TypeError):
+                pass
+
     sizes = [row.calculated_size for row in rows]
     numbers = [row.result_number for row in rows]
     colors = [row.source_color for row in rows]
