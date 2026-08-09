@@ -56,16 +56,9 @@ HTML_PAGE = """<!DOCTYPE html>
   <h1>WinGo Predictor Engine</h1>
 
   <div class="box" style="text-align:center">
-    <div class="lbl">NEXT PREDICTION UNLOCKS IN</div>
-    <div class="timer-val" id="timer-text">00:30</div>
-    <div class="sub" id="target-issue">Next Prediction for Period #---</div>
-  </div>
-
-  <div class="box" style="text-align:center">
     <div class="lbl" id="pred-label">CURRENT PREDICTION (PERIOD #---)</div>
     <div class="pred-val wait" id="pred-text">---</div>
     <div class="conf-txt" id="conf-text">Loading prediction engine...</div>
-    <div id="ai-reason-box" style="font-size:10px;color:#aaa;margin-top:6px;display:none;background:#1a1a24;padding:4px 8px;border-radius:4px"></div>
   </div>
 
   <div class="grid">
@@ -99,19 +92,12 @@ HTML_PAGE = """<!DOCTYPE html>
 <script>
 var timeOffsetMs = 0;
 var lastRemSec = -1;
-var currentNextIssueId = "";
 var lastRenderedIssueId = "";
 
-function updateTimer() {
+function checkRollover() {
   var serverNowMs = Date.now() + timeOffsetMs;
   var nowSec = Math.floor(serverNowMs / 1000);
   var remSec = 30 - (nowSec % 30);
-
-  document.getElementById('timer-text').textContent = '00:' + String(remSec).padStart(2, '0');
-
-  if (currentNextIssueId) {
-    document.getElementById('target-issue').textContent = 'Next Prediction for Period #' + currentNextIssueId + ' in ' + remSec + 's';
-  }
 
   // Trigger instant refetch on period rollover and sub-second retries
   if (lastRemSec !== -1 && remSec > lastRemSec) {
@@ -134,13 +120,6 @@ async function updateData() {
     if (data && data.prediction) {
       var rawIssue = data.upcoming_issue_id || '';
       var currPeriodId = rawIssue.slice(-8);
-      
-      try {
-        var nextNum = BigInt(rawIssue) + 1n;
-        currentNextIssueId = String(nextNum).slice(-8);
-      } catch(e) {
-        currentNextIssueId = "---";
-      }
 
       // Check if DOM update is needed (skip if identical issue ID and prediction)
       var renderKey = currPeriodId + '_' + data.prediction + '_' + (data.confidence || 0);
@@ -161,16 +140,6 @@ async function updateData() {
         document.getElementById('conf-text').innerHTML = 'Confidence: <b>' + confPct + '%</b> <span class="badge ' + badgeClass + '">' + level + '</span>';
         document.getElementById('stat-signals').textContent = (data.agreeing_indicators || '-') + '/' + (data.active_indicators || '-');
         document.getElementById('stat-records').textContent = data.total_records_analyzed || '-';
-
-        // Render AI pattern reasoning if present
-        var aiBox = document.getElementById('ai-reason-box');
-        if (data.indicators && data.indicators.ai_pattern_reasoning && data.indicators.ai_pattern_reasoning.reason) {
-          var ai = data.indicators.ai_pattern_reasoning;
-          aiBox.style.display = 'block';
-          aiBox.innerHTML = '🤖 <b>AI Signal:</b> ' + ai.prediction + ' (' + Math.round((ai.confidence||0)*100) + '%) — ' + (ai.provider || 'Rotator');
-        } else {
-          aiBox.style.display = 'none';
-        }
       }
     } else if (data && data.status === 'INSUFFICIENT_DATA') {
       document.getElementById('pred-text').textContent = 'WAIT';
@@ -207,9 +176,9 @@ async function updateData() {
   } catch (e) {}
 }
 
-updateTimer();
+checkRollover();
 updateData();
-setInterval(updateTimer, 100);
+setInterval(checkRollover, 200);
 setInterval(updateData, 1500);
 </script>
 </body>
