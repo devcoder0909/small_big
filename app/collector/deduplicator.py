@@ -2,9 +2,8 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import select, text
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.models.game_result import GameResult
 from app.collector.parser import ParsedGameResult
@@ -47,8 +46,6 @@ async def upsert_game_result(
     """
     Insert or update a game result using idempotent insertion.
 
-    Uses PostgreSQL ON CONFLICT upsert on PostgreSQL, or SELECT+INSERT/UPDATE on SQLite.
-
     Args:
         session: Active database session.
         parsed: Parsed game result.
@@ -60,7 +57,6 @@ async def upsert_game_result(
         Tuple of (is_new, status_message).
     """
     now = datetime.now(timezone.utc)
-    # Check if record already exists
     existing = await session.execute(
         select(GameResult.issue_id).where(GameResult.issue_id == parsed.issue_id)
     )
@@ -134,8 +130,6 @@ async def upsert_batch(
         "errors": error_count,
     }
 
-
-from sqlalchemy import select, func, text
 
 async def get_total_record_count(session: AsyncSession) -> int:
     """Get total count of game results in the database."""
