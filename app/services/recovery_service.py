@@ -38,10 +38,10 @@ async def recover_missing_records(session: AsyncSession) -> dict:
     )
     latest_known = result.scalar_one_or_none()
 
-    # Fetch from source
+    # Fetch from source (deep page size 50 for max historical coverage)
     client = SourceClient()
     try:
-        fetch_result = await client.fetch_history()
+        fetch_result = await client.fetch_history(page_no=1, page_size=50)
     finally:
         await client.close()
 
