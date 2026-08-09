@@ -540,6 +540,71 @@ def _run_all_indicators(sizes: list[str]) -> dict:
     }
 
 
+def _calculate_adaptive_indicator_weights(sizes: list[str], base_weights: dict) -> dict:
+    """
+    Self-Learning Adaptive Weighting Engine.
+
+    Backtests each of the 10 indicators on recent historical draws (last 15 draws)
+    to calculate real-time individual indicator win rates.
+
+    - Hot indicators (win rate > 50%) receive up to 2.5x dynamic weight amplification.
+    - Cold indicators (win rate < 50%) are suppressed down to 0.2x weight.
+    """
+    if len(sizes) < 25:
+        return dict(base_weights)
+
+    # Indicator single-eval mapping
+    eval_funcs = {
+        "streak_reversal": _analyze_streak_indicator,
+        "markov_transition": _analyze_markov_transition_indicator,
+        "stat_frequency": _analyze_statistical_frequency_indicator,
+        "ema_momentum": _analyze_ema_momentum_indicator,
+        "pattern_match": _analyze_multi_ngram_pattern_indicator,
+        "harmonic_periodicity": _analyze_harmonic_periodicity_indicator,
+        "bayesian_posterior": _analyze_bayesian_posterior_indicator,
+        "volatility_regime": _analyze_volatility_regime_indicator,
+        "chi_square_skew": _analyze_chi_square_goodness_of_fit_indicator,
+        "runs_test": _analyze_runs_test_indicator,
+    }
+
+    indicator_wins = {name: 0 for name in base_weights}
+    indicator_votes = {name: 0 for name in base_weights}
+
+    # Evaluate last 12 draws
+    eval_depth = min(12, len(sizes) - 15)
+    for i in range(1, eval_depth + 1):
+        actual = sizes[i - 1]
+        prior_slice = sizes[i:]
+
+        for name, fn in eval_funcs.items():
+            res = fn(prior_slice)
+            pred = res.get("prediction")
+            if pred in ("SMALL", "BIG"):
+                indicator_votes[name] += 1
+                if pred == actual:
+                    indicator_wins[name] += 1
+
+    adaptive = {}
+    for name, base_w in base_weights.items():
+        votes = indicator_votes[name]
+        wins = indicator_wins[name]
+
+        if votes >= 3:
+            win_rate = wins / votes
+            if win_rate > 0.50:
+                # Hot indicator boost: up to 2.5x
+                mult = 1.0 + (win_rate - 0.50) * 3.0
+            else:
+                # Cold indicator suppression: down to 0.2x
+                mult = max(0.20, 1.0 - (0.50 - win_rate) * 1.6)
+        else:
+            mult = 1.0
+
+        adaptive[name] = round(base_w * mult, 4)
+
+    return adaptive
+
+
 def _score_indicators(indicators: dict, weights: dict) -> tuple:
     """
     Score indicators using squared-confidence amplification.
@@ -644,25 +709,27 @@ async def generate_prediction(
     except Exception as ai_err:
         logger.warning("ai_rotator_integration_warning", error=str(ai_err))
 
+    # Self-Learning Adaptive Weighting based on real-time win-streak accuracy
+    weights = _calculate_adaptive_indicator_weights(sizes, DEFAULT_WEIGHTS)
+
     # Adaptive Dynamic Weighting based on Shannon Entropy & Z-Score
-    weights = dict(DEFAULT_WEIGHTS)
     if shannon_entropy < 0.90:
         # Low entropy = structured patterns => boost pattern-based indicators
-        weights["markov_transition"] += 0.05
-        weights["pattern_match"] += 0.05
-        weights["harmonic_periodicity"] += 0.03
-        weights["runs_test"] += 0.02
-        weights["stat_frequency"] -= 0.08
+        weights["markov_transition"] = round(weights.get("markov_transition", 0.16) + 0.05, 4)
+        weights["pattern_match"] = round(weights.get("pattern_match", 0.14) + 0.05, 4)
+        weights["harmonic_periodicity"] = round(weights.get("harmonic_periodicity", 0.07) + 0.03, 4)
+        weights["runs_test"] = round(weights.get("runs_test", 0.06) + 0.02, 4)
+        weights["stat_frequency"] = max(0.01, round(weights.get("stat_frequency", 0.12) - 0.08, 4))
     elif shannon_entropy > 0.98:
         # High entropy = noisy => boost statistical rebalance indicators
-        weights["stat_frequency"] += 0.05
-        weights["bayesian_posterior"] += 0.04
-        weights["chi_square_skew"] += 0.03
+        weights["stat_frequency"] = round(weights.get("stat_frequency", 0.12) + 0.05, 4)
+        weights["bayesian_posterior"] = round(weights.get("bayesian_posterior", 0.09) + 0.04, 4)
+        weights["chi_square_skew"] = round(weights.get("chi_square_skew", 0.07) + 0.03, 4)
 
     # Z-Score extreme deviation boost
     if abs(z_score) > 2.0:
-        weights["stat_frequency"] += 0.04
-        weights["chi_square_skew"] += 0.03
+        weights["stat_frequency"] = round(weights.get("stat_frequency", 0.12) + 0.04, 4)
+        weights["chi_square_skew"] = round(weights.get("chi_square_skew", 0.07) + 0.03, 4)
 
     # Squared-confidence weighted voting
     small_score, big_score, total_weight, active_indicators = _score_indicators(
@@ -821,17 +888,16 @@ def evaluate_recent_accuracy(rows: list) -> list[dict]:
         if len(prior_sizes) < 5:
             continue
 
-        # Run full 10-indicator ensemble on prior data
+        # Run full 10-indicator ensemble on prior data with self-learning adaptive weights
         indicators = _run_all_indicators(prior_sizes)
-        weights = dict(DEFAULT_WEIGHTS)
+        weights = _calculate_adaptive_indicator_weights(prior_sizes, DEFAULT_WEIGHTS)
         small_score, big_score, total_weight, active = _score_indicators(
             indicators, weights
         )
 
-        if total_weight > 0:
-            norm_small = small_score / total_weight
-            norm_big = big_score / total_weight
-            pred = "SMALL" if norm_small > norm_big else "BIG"
+        sum_active = small_score + big_score
+        if sum_active > 0:
+            pred = "SMALL" if small_score > big_score else "BIG"
         else:
             pred = prior_sizes[0]
 
