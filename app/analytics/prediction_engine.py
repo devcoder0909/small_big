@@ -219,7 +219,7 @@ def _analyze_markov_transition_indicator(sizes: list[str]) -> dict:
 
 
 def _analyze_statistical_frequency_indicator(sizes: list[str]) -> dict:
-    """Frequency rebalance indicator using Z-Score statistical significance."""
+    """Frequency dominance indicator using multi-window Z-Score analysis."""
     if len(sizes) < 20:
         return {"prediction": None, "confidence": 0, "reason": "insufficient_data"}
 
@@ -229,30 +229,31 @@ def _analyze_statistical_frequency_indicator(sizes: list[str]) -> dict:
 
     composite_z = z_20 * 0.5 + z_50 * 0.3 + z_100 * 0.2
 
+    # Follow the dominant direction — if SMALL is hot, predict SMALL
     if composite_z > 1.5:
-        conf = min(0.85, 0.45 + (composite_z - 1.5) * 0.15)
-        return {
-            "prediction": "BIG",
-            "confidence": round(conf, 3),
-            "reason": f"stat_rebalance_z_{composite_z:.2f}_small_overrepresented",
-        }
-    elif composite_z < -1.5:
-        conf = min(0.85, 0.45 + (abs(composite_z) - 1.5) * 0.15)
+        conf = min(0.78, 0.45 + (composite_z - 1.5) * 0.12)
         return {
             "prediction": "SMALL",
             "confidence": round(conf, 3),
-            "reason": f"stat_rebalance_z_{composite_z:.2f}_big_overrepresented",
+            "reason": f"stat_small_dominant_z_{composite_z:.2f}",
+        }
+    elif composite_z < -1.5:
+        conf = min(0.78, 0.45 + (abs(composite_z) - 1.5) * 0.12)
+        return {
+            "prediction": "BIG",
+            "confidence": round(conf, 3),
+            "reason": f"stat_big_dominant_z_{composite_z:.2f}",
         }
     else:
         return {
             "prediction": None,
             "confidence": 0,
-            "reason": f"frequency_in_normal_range_z_{composite_z:.2f}",
+            "reason": f"frequency_balanced_z_{composite_z:.2f}",
         }
 
 
 def _analyze_ema_momentum_indicator(sizes: list[str]) -> dict:
-    """Dual Exponential Moving Average (EMA) momentum indicator."""
+    """Dual EMA momentum-following indicator. Follows the trend, never inverts."""
     if len(sizes) < 25:
         return {"prediction": None, "confidence": 0, "reason": "insufficient_data"}
 
@@ -272,29 +273,30 @@ def _analyze_ema_momentum_indicator(sizes: list[str]) -> dict:
     if abs(diff) < 0.05:
         return {"prediction": None, "confidence": 0, "reason": "no_momentum_cross"}
 
-    if diff > 0.15:
-        return {
-            "prediction": "BIG",
-            "confidence": round(min(0.78, 0.45 + diff * 0.6), 3),
-            "reason": f"ema_diff_small_high_{diff:.2f}",
-        }
-    elif diff < -0.15:
+    # Follow momentum: fast EMA above slow = SMALL momentum, follow it
+    if diff > 0.10:
         return {
             "prediction": "SMALL",
+            "confidence": round(min(0.78, 0.45 + diff * 0.6), 3),
+            "reason": f"ema_small_momentum_{diff:.2f}",
+        }
+    elif diff < -0.10:
+        return {
+            "prediction": "BIG",
             "confidence": round(min(0.78, 0.45 + abs(diff) * 0.6), 3),
-            "reason": f"ema_diff_big_high_{abs(diff):.2f}",
+            "reason": f"ema_big_momentum_{abs(diff):.2f}",
         }
     elif diff > 0:
         return {
             "prediction": "SMALL",
             "confidence": 0.44,
-            "reason": "following_small_momentum",
+            "reason": "weak_small_momentum",
         }
     else:
         return {
             "prediction": "BIG",
             "confidence": 0.44,
-            "reason": "following_big_momentum",
+            "reason": "weak_big_momentum",
         }
 
 
@@ -380,11 +382,10 @@ def _analyze_harmonic_periodicity_indicator(sizes: list[str]) -> dict:
 
 
 def _analyze_bayesian_posterior_indicator(sizes: list[str]) -> dict:
-    """Bayesian Model Averaging using Dirichlet-Multinomial Conjugate Prior."""
+    """Bayesian Model Averaging using Dirichlet-Multinomial. Follows the posterior."""
     if len(sizes) < 30:
         return {"prediction": None, "confidence": 0, "reason": "insufficient_data"}
 
-    # Prior: Alpha = 10 (SMALL), Beta = 10 (BIG)
     prior_small = 10.0
     prior_big = 10.0
 
@@ -399,25 +400,25 @@ def _analyze_bayesian_posterior_indicator(sizes: list[str]) -> dict:
     p_small_post = post_small / total_post
     p_big_post = post_big / total_post
 
-    # Posterior ratio favors mean reversion when posterior skews heavily
+    # Follow the posterior — predict what has higher posterior probability
     if p_small_post > 0.58:
         return {
-            "prediction": "BIG",
-            "confidence": round(min(0.78, 0.40 + (p_small_post - 0.58) * 1.5), 3),
-            "reason": f"bayesian_posterior_small_high_{p_small_post:.3f}",
+            "prediction": "SMALL",
+            "confidence": round(min(0.75, 0.40 + (p_small_post - 0.58) * 1.2), 3),
+            "reason": f"bayesian_small_dominant_{p_small_post:.3f}",
         }
     elif p_big_post > 0.58:
         return {
-            "prediction": "SMALL",
-            "confidence": round(min(0.78, 0.40 + (p_big_post - 0.58) * 1.5), 3),
-            "reason": f"bayesian_posterior_big_high_{p_big_post:.3f}",
+            "prediction": "BIG",
+            "confidence": round(min(0.75, 0.40 + (p_big_post - 0.58) * 1.2), 3),
+            "reason": f"bayesian_big_dominant_{p_big_post:.3f}",
         }
 
     return {"prediction": None, "confidence": 0, "reason": "bayesian_posterior_neutral"}
 
 
 def _analyze_volatility_regime_indicator(sizes: list[str]) -> dict:
-    """Volatility & Regime Shift Detection based on sliding entropy variance."""
+    """Volatility & Regime Shift Detection. Follows momentum in all regimes."""
     if len(sizes) < 30:
         return {"prediction": None, "confidence": 0, "reason": "insufficient_data"}
 
@@ -429,23 +430,22 @@ def _analyze_volatility_regime_indicator(sizes: list[str]) -> dict:
         # Structured regime -> follow latest momentum
         return {
             "prediction": sizes[0],
-            "confidence": 0.65,
-            "reason": f"structured_regime_low_entropy_{entropy_recent:.2f}",
+            "confidence": 0.68,
+            "reason": f"structured_regime_follow_momentum_{entropy_recent:.2f}",
         }
     elif entropy_diff > 0.15:
-        # High noise regime -> mean reversion
-        opposite = "BIG" if sizes[0] == "SMALL" else "SMALL"
+        # Noisy regime -> still follow latest, but lower confidence
         return {
-            "prediction": opposite,
-            "confidence": 0.60,
-            "reason": f"noisy_regime_high_entropy_{entropy_recent:.2f}",
+            "prediction": sizes[0],
+            "confidence": 0.52,
+            "reason": f"noisy_regime_weak_momentum_{entropy_recent:.2f}",
         }
 
     return {"prediction": None, "confidence": 0, "reason": "stable_entropy_regime"}
 
 
 def _analyze_chi_square_goodness_of_fit_indicator(sizes: list[str]) -> dict:
-    """Pearson's Chi-Square Goodness-of-Fit Statistically Significant Skew Filter."""
+    """Pearson's Chi-Square Goodness-of-Fit. Follows the dominant direction."""
     if len(sizes) < 20:
         return {"prediction": None, "confidence": 0, "reason": "insufficient_data"}
 
@@ -458,15 +458,16 @@ def _analyze_chi_square_goodness_of_fit_indicator(sizes: list[str]) -> dict:
     chi_sq = ((o_small - expected) ** 2 + (o_big - expected) ** 2) / expected
 
     if chi_sq >= 3.841:
-        target = "BIG" if o_small > o_big else "SMALL"
-        conf = min(0.85, 0.55 + (chi_sq - 3.841) * 0.05)
+        # Follow the dominant direction, not invert it
+        target = "SMALL" if o_small > o_big else "BIG"
+        conf = min(0.78, 0.50 + (chi_sq - 3.841) * 0.04)
         return {
             "prediction": target,
             "confidence": round(conf, 3),
-            "reason": f"chi_square_significant_skew_chisq_{chi_sq:.2f}",
+            "reason": f"chi_square_dominant_{target.lower()}_chisq_{chi_sq:.2f}",
         }
 
-    return {"prediction": None, "confidence": 0, "reason": "chi_square_uniform_distribution"}
+    return {"prediction": None, "confidence": 0, "reason": "chi_square_balanced"}
 
 
 def _analyze_runs_test_indicator(sizes: list[str]) -> dict:
