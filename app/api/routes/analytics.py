@@ -93,3 +93,20 @@ async def stats_prediction(session: AsyncSession = Depends(get_session)):
     Past patterns do NOT guarantee future outcomes.
     """
     return await get_prediction(session)
+
+
+@router.get("/v3-metrics")
+async def get_v3_metrics():
+    """
+    V3 Adaptive Edge Discovery Internal Dashboard Metrics.
+
+    Exposes champion strategy performance, regime statistics,
+    abstention rates, and Brier score tracking.
+    """
+    from app.analytics.champion_selector import champion_selector
+    return {
+        "status": "HEALTHY",
+        "mode": "V3_ADAPTIVE_EDGE_DISCOVERY",
+        "champion_selector": champion_selector.get_metrics_summary(),
+        "disclaimer": "Internal OOS performance metrics for champion/challenger strategy evaluation.",
+    }

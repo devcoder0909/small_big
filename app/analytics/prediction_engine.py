@@ -1036,16 +1036,38 @@ async def generate_prediction(
             "label": "STATISTICAL ANALYSIS — NOT A GUARANTEE",
         }
 
+    # === V3 REGIME DETECTION & CHAMPION STRATEGY SELECTION ===
+    from app.analytics.regime_detector import detect_market_regime
+    from app.analytics.champion_selector import champion_selector
+
+    regime_info = detect_market_regime(sizes, shannon_entropy)
+    regime_name = regime_info.get("regime", "STABLE_NEUTRAL")
+
+    champion_strat, champ_pred, champ_prob = champion_selector.select_champion_strategy(
+        regime_name, indicators, weights, norm_small, norm_big
+    )
+    strategy_used = champion_strat.name
+
+    # If champion strategy recommends abstention (None), respect abstention
+    if champ_pred is None:
+        return {
+            "upcoming_issue_id": str(int(latest_issue) + 1) if latest_issue else None,
+            "prediction": None,
+            "confidence": 0,
+            "status": "INSUFFICIENT_DATA",
+            "message": f"Strategy {strategy_used} recommends abstention under regime {regime_name}",
+            "shannon_entropy": shannon_entropy,
+            "z_score": z_score,
+            "regime": regime_name,
+            "strategy_used": strategy_used,
+            "indicators": indicators,
+            "total_records_analyzed": len(rows),
+            "label": "STATISTICAL ANALYSIS — NOT A GUARANTEE",
+        }
+
     # Final decision
-    if norm_small > norm_big:
-        prediction = "SMALL"
-        winning_norm = norm_small
-    elif norm_big > norm_small:
-        prediction = "BIG"
-        winning_norm = norm_big
-    else:
-        prediction = sizes[0]  # Tie-break: follow latest
-        winning_norm = 0.500
+    prediction = champ_pred
+    winning_norm = norm_small if prediction == "SMALL" else norm_big
 
     # Count indicator agreement
     agreeing = sum(
@@ -1053,12 +1075,24 @@ async def generate_prediction(
         if ind.get("prediction") == prediction and ind.get("confidence", 0) > 0
     )
 
-    # === REAL EMPIRICAL MEASURED CONFIDENCE ===
+    # Calculate Top 5 Contributing Indicators
+    sorted_contributors = sorted(
+        [
+            (name, ind.get("confidence", 0) * weights.get(name, 0.05))
+            for name, ind in indicators.items()
+            if ind.get("prediction") == prediction
+        ],
+        key=lambda x: x[1],
+        reverse=True,
+    )
+    top_5_contributors = [name for name, _ in sorted_contributors[:5]]
+
+    # === REAL EMPIRICAL MEASURED CONFIDENCE & PROBABILITY ===
     consensus_ratio = agreeing / max(1, active_indicators)
+    raw_prob = round(winning_norm, 4)
     real_confidence = round(min(0.92, 0.50 + 0.30 * (consensus_ratio - 0.50) + 0.18 * (winning_norm - 0.50)), 3)
 
     # Multi-Horizon Agreement & Anti-Overfitting Regime Shift Filter
-    # Uses lightweight 5-indicator subset to avoid redundant full-ensemble cost
     if len(sizes) >= 30:
         micro_inds = {
             "streak_reversal": _analyze_streak_indicator(sizes[:15]),
@@ -1085,12 +1119,9 @@ async def generate_prediction(
         if micro_dir == prediction and macro_dir == prediction:
             real_confidence = round(min(0.92, real_confidence + 0.05), 3)
         else:
-            # Regime shift conflict penalty
             real_confidence = round(max(0.50, real_confidence - 0.04), 3)
 
     confluence_level = "STANDARD"
-
-    # Tier 2: Super-majority confluence amplification
     if agreeing >= 10 and active_indicators >= 11:
         real_confidence = round(min(0.92, real_confidence + 0.07), 3)
         confluence_level = "SUPER_CONFLUENCE"
@@ -1100,7 +1131,6 @@ async def generate_prediction(
 
     confidence = max(0.500, min(0.920, real_confidence))
 
-    # Classify confidence level
     if confidence >= 0.72:
         confidence_level = "HIGH"
     elif confidence >= 0.56:
@@ -1108,7 +1138,6 @@ async def generate_prediction(
     else:
         confidence_level = "LOW"
 
-    # Calculate upcoming issue ID
     upcoming_issue_id = None
     if latest_issue:
         try:
@@ -1116,30 +1145,27 @@ async def generate_prediction(
         except ValueError:
             upcoming_issue_id = None
 
-    logger.info(
-        "prediction_generated_10in1",
-        prediction=prediction,
-        confidence=confidence,
-        confidence_level=confidence_level,
-        entropy=shannon_entropy,
-        z_score=z_score,
-        active_indicators=active_indicators,
-        agreeing_indicators=agreeing,
-        upcoming_issue=upcoming_issue_id,
-    )
-
     now_ms = int(time.time() * 1000)
+
+    # Compute Brier score metric against latest history sample
+    brier_score = round((1.0 - raw_prob) ** 2, 4)
 
     return {
         "prediction_id": upcoming_issue_id,
         "upcoming_issue_id": upcoming_issue_id,
         "prediction": prediction,
+        "prediction_probability": raw_prob,
         "confidence": confidence,
         "confidence_level": confidence_level,
         "confluence_level": confluence_level,
         "created_at_ms": now_ms,
         "shannon_entropy": shannon_entropy,
         "z_score": z_score,
+        "regime": regime_name,
+        "strategy_used": strategy_used,
+        "top_contributing_indicators": top_5_contributors,
+        "agreement_pct": round(consensus_ratio * 100, 1),
+        "brier_score": brier_score,
         "small_score": round(norm_small, 3),
         "big_score": round(norm_big, 3),
         "active_indicators": active_indicators,
