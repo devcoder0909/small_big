@@ -60,11 +60,14 @@ async def upsert_game_result(
         Tuple of (is_new, status_message).
     """
     now = datetime.now(timezone.utc)
-    bind = session.get_bind()
-    dialect_name = bind.dialect.name if bind else "postgresql"
+    # Check if record already exists
+    existing = await session.execute(
+        select(GameResult.issue_id).where(GameResult.issue_id == parsed.issue_id)
+    )
+    is_existing = existing.scalar_one_or_none() is not None
 
-    if dialect_name == "postgresql":
-        stmt = pg_insert(GameResult).values(
+    if not is_existing:
+        new_record = GameResult(
             issue_id=parsed.issue_id,
             result_number=parsed.result_number,
             source_color=parsed.source_color,
@@ -80,57 +83,15 @@ async def upsert_game_result(
             created_at=now,
             updated_at=now,
         )
-
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["issue_id"],
-            set_={
-                "last_observed_at": now,
-                "updated_at": now,
-            },
-        )
-
-        stmt = stmt.returning(GameResult.created_at)
-        result = await session.execute(stmt)
-        row = result.fetchone()
-
-        if row and row[0] >= now:
-            logger.info("new_record", issue_id=parsed.issue_id, size=parsed.calculated_size)
-            return True, "NEW_RECORD_DETECTED"
-        else:
-            logger.debug("duplicate_record", issue_id=parsed.issue_id)
-            return False, "DUPLICATE_SKIPPED"
+        session.add(new_record)
+        logger.info("new_record", issue_id=parsed.issue_id, size=parsed.calculated_size)
+        return True, "NEW_RECORD_DETECTED"
     else:
-        # Fallback for SQLite / other test databases
-        existing = await session.execute(
+        await session.execute(
             select(GameResult).where(GameResult.issue_id == parsed.issue_id)
         )
-        record = existing.scalar_one_or_none()
-
-        if record is None:
-            new_record = GameResult(
-                issue_id=parsed.issue_id,
-                result_number=parsed.result_number,
-                source_color=parsed.source_color,
-                premium=parsed.premium,
-                sum_value=parsed.sum_value,
-                calculated_size=parsed.calculated_size,
-                source_created_at=source_created_at,
-                first_observed_at=now,
-                last_observed_at=now,
-                source_url=source_url,
-                raw_response_id=raw_response_id,
-                data_hash=parsed.data_hash,
-                created_at=now,
-                updated_at=now,
-            )
-            session.add(new_record)
-            logger.info("new_record", issue_id=parsed.issue_id, size=parsed.calculated_size)
-            return True, "NEW_RECORD_DETECTED"
-        else:
-            record.last_observed_at = now
-            record.updated_at = now
-            logger.debug("duplicate_record", issue_id=parsed.issue_id)
-            return False, "DUPLICATE_SKIPPED"
+        logger.debug("duplicate_record", issue_id=parsed.issue_id)
+        return False, "DUPLICATE_SKIPPED"
 
 
 async def upsert_batch(
