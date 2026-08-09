@@ -345,7 +345,7 @@ def _analyze_harmonic_periodicity_indicator(sizes: list[str]) -> dict:
         else:
             break
 
-    if alt_count >= 3:
+    if alt_count >= 5:
         opposite = "BIG" if sizes[0] == "SMALL" else "SMALL"
         conf = min(0.82, 0.50 + alt_count * 0.05)
         return {
@@ -931,9 +931,9 @@ def _get_current_streak(sizes: list[str]) -> dict:
 
 def evaluate_recent_accuracy(rows: list) -> list[dict]:
     """
-    Evaluate accuracy of the full 10-indicator ensemble on recent draws.
+    Evaluate accuracy of the full 12-indicator ensemble on recent draws.
 
-    For each of the last 5 draws, re-runs all 10 indicators on the data
+    For each of the last 5 draws, re-runs all 12 indicators on the data
     that was available BEFORE that draw occurred, then checks if the
     ensemble prediction matched the actual result.
 
@@ -946,19 +946,21 @@ def evaluate_recent_accuracy(rows: list) -> list[dict]:
     if len(rows) < 10:
         return []
 
+    all_sizes = [r.calculated_size for r in rows]
+    all_numbers = [r.result_number for r in rows]
+    adaptive_weights = _calculate_adaptive_indicator_weights(all_sizes, DEFAULT_WEIGHTS, all_numbers)
+
     results = []
     for i in range(min(5, len(rows) - 5)):
         current_row = rows[i]
-        prior_sizes = [r.calculated_size for r in rows[i + 1 :]]
-        prior_numbers = [r.result_number for r in rows[i + 1 :]]
+        prior_sizes = all_sizes[i + 1 :]
+        prior_numbers = all_numbers[i + 1 :]
         if len(prior_sizes) < 5:
             continue
 
-        # Run full 12-indicator ensemble on prior data with self-learning adaptive weights
         indicators = _run_all_indicators(prior_sizes, prior_numbers)
-        weights = _calculate_adaptive_indicator_weights(prior_sizes, DEFAULT_WEIGHTS, prior_numbers)
         small_score, big_score, total_weight, active = _score_indicators(
-            indicators, weights
+            indicators, adaptive_weights
         )
 
         sum_active = small_score + big_score
