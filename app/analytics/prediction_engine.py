@@ -580,6 +580,16 @@ async def generate_prediction(
         prediction = sizes[0]  # Tie-break: follow latest
         confidence = 0.50
 
+    # Micro-Macro Multi-Window Confluence Boosting (Micro 10 vs Medium 30 vs Macro 100)
+    if len(sizes) >= 30:
+        micro_sizes = sizes[:10]
+        micro_small = sum(1 for s in micro_sizes if s == "SMALL")
+        micro_big = len(micro_sizes) - micro_small
+        micro_dir = "SMALL" if micro_small > micro_big else "BIG"
+
+        if micro_dir == prediction and agreeing >= 4:
+            confidence = round(min(0.95, confidence + 0.08), 3)
+
     # Classify confidence level
     if confidence >= 0.70:
         confidence_level = "HIGH"
