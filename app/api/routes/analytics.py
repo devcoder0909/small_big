@@ -98,15 +98,20 @@ async def stats_prediction(session: AsyncSession = Depends(get_session)):
 @router.get("/v3-metrics")
 async def get_v3_metrics():
     """
-    V3 Adaptive Edge Discovery Internal Dashboard Metrics.
+    V3 Adaptive Edge Discovery Internal Dashboard Metrics & Timing Telemetry.
 
     Exposes champion strategy performance, regime statistics,
-    abstention rates, and Brier score tracking.
+    timing percentiles (p50, p95, p99, max), and pipeline state.
     """
     from app.analytics.champion_selector import champion_selector
+    from app.analytics.telemetry import telemetry_collector
+    from app.services.prediction_pipeline import pipeline
+
     return {
         "status": "HEALTHY",
         "mode": "V3_ADAPTIVE_EDGE_DISCOVERY",
+        "pipeline_state": pipeline.state.value if hasattr(pipeline, "state") else "UNKNOWN",
+        "timing_telemetry": telemetry_collector.get_summary_stats(),
         "champion_selector": champion_selector.get_metrics_summary(),
-        "disclaimer": "Internal OOS performance metrics for champion/challenger strategy evaluation.",
+        "disclaimer": "Internal OOS performance & timing telemetry metrics for system observability.",
     }

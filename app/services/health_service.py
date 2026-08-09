@@ -33,22 +33,31 @@ async def get_health(session: AsyncSession) -> dict:
     last_new = None
 
     if heartbeat:
-        collector_status = heartbeat.status
+        collector_status = heartbeat.status or "unknown"
         last_fetch = heartbeat.last_successful_fetch
         last_new = heartbeat.last_new_record
 
         # Check staleness
         settings = get_settings()
         if last_fetch:
-            age = (datetime.now(timezone.utc) - last_fetch).total_seconds()
+            # Ensure timezone-aware datetime comparison
+            last_fetch_utc = last_fetch.replace(tzinfo=timezone.utc) if last_fetch.tzinfo is None else last_fetch
+            age = (datetime.now(timezone.utc) - last_fetch_utc).total_seconds()
             if age > settings.health_degraded_threshold_seconds:
                 collector_status = "DEGRADED"
 
-    overall = "healthy" if db_connected and collector_status in ("HEALTHY", "STARTING") else "degraded"
+    c_status_lower = collector_status.lower() if collector_status else "unknown"
+
+    if not db_connected:
+        overall = "unhealthy"
+    elif c_status_lower in ("healthy", "running", "starting"):
+        overall = "healthy"
+    else:
+        overall = "degraded"
 
     return {
         "status": overall,
-        "collector": collector_status.lower() if collector_status else "unknown",
+        "collector": c_status_lower,
         "database": "connected" if db_connected else "disconnected",
         "last_successful_fetch": last_fetch.isoformat() if last_fetch else None,
         "last_new_record": last_new.isoformat() if last_new else None,
