@@ -106,10 +106,10 @@ function updatePredictionCountdown() {
 
     if (timerEl) {
       if (remainingSec > 0) {
-        timerEl.textContent = '⚡ Prediction Active • Expires in ' + remainingSec + 's';
+        timerEl.textContent = 'Live • Auto-Updates in ' + remainingSec + 's';
         timerEl.style.color = '#00d68f';
       } else {
-        timerEl.textContent = '⚡ 0s • Updating Prediction...';
+        timerEl.textContent = 'Live • Auto-Updates in 0s';
         timerEl.style.color = '#ffd700';
 
         // Immediate refetch when countdown hits 0s
@@ -120,7 +120,7 @@ function updatePredictionCountdown() {
       }
     }
   } else if (timerEl) {
-    timerEl.textContent = '⚡ Prediction Active';
+    timerEl.textContent = 'Live • Auto-Updates in --s';
     timerEl.style.color = '#00d68f';
   }
 }
