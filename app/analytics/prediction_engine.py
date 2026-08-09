@@ -786,9 +786,12 @@ def _calculate_adaptive_indicator_weights(sizes: list[str], base_weights: dict, 
 
         if votes >= 3:
             win_rate = wins / votes
-            if win_rate > 0.50:
+            if win_rate >= 0.55:
                 # Hot indicator boost: up to 2.5x
                 mult = 1.0 + (win_rate - 0.50) * 3.0
+            elif win_rate < 0.35:
+                # Failing indicator severe penalization: down to 0.05x
+                mult = 0.05
             else:
                 # Cold indicator suppression: down to 0.2x
                 mult = max(0.20, 1.0 - (0.50 - win_rate) * 1.6)
@@ -958,13 +961,13 @@ async def generate_prediction(
     # Final decision
     if norm_small > norm_big:
         prediction = "SMALL"
-        confidence = round(norm_small, 3)
+        winning_norm = norm_small
     elif norm_big > norm_small:
         prediction = "BIG"
-        confidence = round(norm_big, 3)
+        winning_norm = norm_big
     else:
         prediction = sizes[0]  # Tie-break: follow latest
-        confidence = 0.500
+        winning_norm = 0.500
 
     # Count indicator agreement
     agreeing = sum(
@@ -972,9 +975,11 @@ async def generate_prediction(
         if ind.get("prediction") == prediction and ind.get("confidence", 0) > 0
     )
 
-    # === MULTI-TIER CONFLUENCE BOOSTING ===
+    # === REAL EMPIRICAL MEASURED CONFIDENCE ===
+    consensus_ratio = agreeing / max(1, active_indicators)
+    real_confidence = round(min(0.92, 0.50 + 0.30 * (consensus_ratio - 0.50) + 0.18 * (winning_norm - 0.50)), 3)
 
-    # Tier 1: Dual-Horizon Synthesis (Micro 15 vs Macro 100 agreement)
+    # Multi-Horizon Agreement & Anti-Overfitting Regime Shift Filter
     if len(sizes) >= 30:
         micro_indicators = _run_all_indicators(
             sizes[:15],
@@ -994,29 +999,27 @@ async def generate_prediction(
         macro_dir = "SMALL" if M_small >= M_big else "BIG"
 
         if micro_dir == prediction and macro_dir == prediction:
-            confidence = round(min(0.96, confidence + 0.08), 3)
+            real_confidence = round(min(0.92, real_confidence + 0.05), 3)
+        else:
+            # Regime shift conflict penalty
+            real_confidence = round(max(0.50, real_confidence - 0.04), 3)
 
     confluence_level = "STANDARD"
 
-    # Tier 2: Super-majority confluence amplification (8+ of 12 indicators agree)
-    if agreeing >= 8 and active_indicators >= 9:
-        confidence = round(min(0.98, confidence + 0.12), 3)
+    # Tier 2: Super-majority confluence amplification
+    if agreeing >= 10 and active_indicators >= 11:
+        real_confidence = round(min(0.92, real_confidence + 0.07), 3)
         confluence_level = "SUPER_CONFLUENCE"
-    elif agreeing >= 7 and active_indicators >= 8:
-        confidence = round(min(0.95, confidence + 0.08), 3)
+    elif agreeing >= 8 and active_indicators >= 9:
+        real_confidence = round(min(0.88, real_confidence + 0.04), 3)
         confluence_level = "MAJORITY_CONFLUENCE"
-    elif agreeing >= 6 and active_indicators >= 7:
-        confidence = round(min(0.92, confidence + 0.05), 3)
 
-    # Tier 3: Streak exhaustion emergency boost
-    streak = _get_current_streak(sizes)
-    if streak["length"] >= 5 and prediction != streak["size"]:
-        confidence = round(min(0.94, confidence + 0.07), 3)
+    confidence = max(0.500, min(0.920, real_confidence))
 
     # Classify confidence level
-    if confidence >= 0.75:
+    if confidence >= 0.72:
         confidence_level = "HIGH"
-    elif confidence >= 0.55:
+    elif confidence >= 0.56:
         confidence_level = "MEDIUM"
     else:
         confidence_level = "LOW"
