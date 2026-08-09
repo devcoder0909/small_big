@@ -28,6 +28,7 @@ async def lifespan(app: FastAPI):
     async def _embedded_collector():
         from app.collector.runner import CollectorRunner
         from app.services.recovery_service import recover_missing_records
+        from app.services.prediction_pipeline import pipeline
         from app.core.database import async_session_factory
         from app.core.logging import get_logger
 
@@ -43,7 +44,14 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning("embedded_collector_recovery_error", error=str(e))
 
-        # 2. Perpetual 24/7 collection cycle (every 3 seconds)
+        # 2. Generate initial prediction from existing data on startup
+        try:
+            await pipeline.force_refresh()
+            logger.info("pipeline_startup_prediction_generated")
+        except Exception as e:
+            logger.warning("pipeline_startup_error", error=str(e))
+
+        # 3. Perpetual 24/7 collection cycle (every 3 seconds)
         while True:
             try:
                 await runner.run_single_cycle()

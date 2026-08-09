@@ -212,6 +212,8 @@ class CollectorRunner:
             "errors": 0,
         }
 
+        _trigger_issue_id = None  # Captured inside transaction, used after commit
+
         try:
             fetch_result = await self.client.fetch_history()
 
@@ -307,14 +309,24 @@ class CollectorRunner:
                     })
 
                     if has_new:
+                        # Capture latest issue ID for pipeline trigger after commit
+                        _trigger_issue_id = valid_results[0].issue_id if valid_results else None
                         logger.info(
                             "cycle_complete",
                             new_records=batch_result["new_records"],
                             duplicates=batch_result["duplicates"],
-                            latest_issue=valid_results[0].issue_id if valid_results else None,
+                            latest_issue=_trigger_issue_id,
                         )
                     else:
                         logger.debug("no_new_data")
+
+                # Transaction committed — trigger prediction pipeline immediately
+                if _trigger_issue_id:
+                    try:
+                        from app.services.prediction_pipeline import pipeline
+                        asyncio.create_task(pipeline.trigger_new_result(_trigger_issue_id))
+                    except Exception as pipe_err:
+                        logger.warning("pipeline_trigger_error", error=str(pipe_err))
 
         except Exception as e:
             logger.error("cycle_error", error=str(e), error_type=type(e).__name__)

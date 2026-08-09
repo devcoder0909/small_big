@@ -1,4 +1,4 @@
-"""Public routes — Superfast zero-animation prediction UI focusing strictly on accurate data and timers."""
+"""Public routes — Event-driven prediction UI with ANALYZING → READY state machine."""
 
 import time
 from fastapi import APIRouter, Depends
@@ -8,7 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session
 from app.models.game_result import GameResult
-from app.services.analytics_service import get_prediction
 from app.analytics.prediction_engine import evaluate_recent_accuracy
 
 router = APIRouter(tags=["public"])
@@ -30,6 +29,7 @@ HTML_PAGE = """<!DOCTYPE html>
     .pred-val.big{color:#ff4d6a}
     .pred-val.small{color:#4da6ff}
     .pred-val.wait{color:#555;font-size:24px}
+    .pred-val.analyzing{color:#ffd700;font-size:20px}
     .conf-txt{font-size:12px;color:#888}
     .conf-txt b{color:#fff}
     .badge{display:inline-block;padding:2px 6px;border-radius:3px;font-size:10px;font-weight:700}
@@ -49,6 +49,10 @@ HTML_PAGE = """<!DOCTYPE html>
     .win{color:#00d68f;font-weight:700}
     .loss{color:#ff4d6a;font-weight:700}
     .foot{text-align:center;font-size:9px;color:#444;margin-top:8px}
+    .status-dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:4px}
+    .status-dot.ready{background:#00d68f}
+    .status-dot.analyzing{background:#ffd700}
+    .status-dot.waiting{background:#555}
   </style>
 </head>
 <body>
@@ -58,6 +62,7 @@ HTML_PAGE = """<!DOCTYPE html>
     <div class="lbl" id="pred-label" style="font-size:13px;font-weight:700;color:#aaa;margin-bottom:6px">PERIOD #---</div>
     <div class="pred-val wait" id="pred-text">---</div>
     <div class="conf-txt" id="conf-text">Confidence: <b>--%</b> — <span class="badge low">LOW</span></div>
+    <div class="sub" id="pred-status" style="margin-top:6px;font-size:10px;color:#555"></div>
   </div>
 
   <div class="grid">
@@ -86,10 +91,10 @@ HTML_PAGE = """<!DOCTYPE html>
     </table>
   </div>
 
-  <div class="foot">100% Real Scraped Data. Auto-Analyzed Within 5s of Draw.</div>
+  <div class="foot">Event-Driven Pipeline. Auto-Analyzed on New Result.</div>
 
 <script>
-var lastRenderedIssueId = "";
+var lastRenderedKey = "";
 var currentPredictionData = null;
 
 async function updateData() {
@@ -97,24 +102,35 @@ async function updateData() {
     var res = await fetch('/api/v1/public/prediction');
     var data = await res.json();
 
-    if (data && data.prediction && data.upcoming_issue_id) {
-      if (currentPredictionData && currentPredictionData.upcoming_issue_id) {
-        var newId = parseInt(data.upcoming_issue_id, 10);
-        var currId = parseInt(currentPredictionData.upcoming_issue_id, 10);
-        if (!isNaN(newId) && !isNaN(currId) && newId < currId) {
-          return;
-        }
+    if (!data) return;
+
+    var status = data.status || "";
+    var issueId = data.upcoming_issue_id || "";
+    var periodDisplay = issueId ? issueId.slice(-8) : "---";
+
+    // ANALYZING state — new period, prediction not ready yet
+    if (status === "ANALYZING") {
+      var analyzeKey = "analyzing_" + periodDisplay;
+      if (analyzeKey !== lastRenderedKey) {
+        lastRenderedKey = analyzeKey;
+        document.getElementById('pred-label').textContent = 'PERIOD #' + periodDisplay;
+        var predEl = document.getElementById('pred-text');
+        predEl.textContent = 'ANALYZING...';
+        predEl.className = 'pred-val analyzing';
+        document.getElementById('conf-text').innerHTML = 'Processing latest result...';
+        document.getElementById('pred-status').innerHTML = '<span class="status-dot analyzing"></span>Generating prediction';
+        document.getElementById('stat-signals').textContent = '-';
+        document.getElementById('stat-records').textContent = '-';
       }
+    }
+    // READY / ACTIVE state — prediction locked and available
+    else if (data.prediction && (status === "READY" || status === "ACTIVE")) {
+      var renderKey = periodDisplay + '_' + data.prediction + '_' + (data.confidence || 0);
+      if (renderKey !== lastRenderedKey) {
+        lastRenderedKey = renderKey;
+        currentPredictionData = data;
 
-      currentPredictionData = data;
-      var rawIssue = data.upcoming_issue_id || '';
-      var currPeriodId = rawIssue.slice(-8);
-
-      var renderKey = currPeriodId + '_' + data.prediction + '_' + (data.confidence || 0);
-      if (renderKey !== lastRenderedIssueId) {
-        lastRenderedIssueId = renderKey;
-
-        document.getElementById('pred-label').textContent = 'PERIOD #' + currPeriodId;
+        document.getElementById('pred-label').textContent = 'PERIOD #' + periodDisplay;
 
         var predEl = document.getElementById('pred-text');
         predEl.textContent = data.prediction;
@@ -126,16 +142,22 @@ async function updateData() {
         var badgeClass = (isSuper || data.confidence >= 0.72) ? 'high' : data.confidence >= 0.56 ? 'med' : 'low';
 
         document.getElementById('conf-text').innerHTML = 'Confidence: <b>' + confPct + '%</b> — <span class="badge ' + badgeClass + '">' + level + '</span>';
+        document.getElementById('pred-status').innerHTML = '<span class="status-dot ready"></span>Prediction Ready';
         document.getElementById('stat-signals').textContent = (data.agreeing_indicators || '-') + '/' + (data.active_indicators || '-');
         document.getElementById('stat-records').textContent = data.total_records_analyzed || '-';
       }
-    } else if (data && data.status === 'INSUFFICIENT_DATA') {
+    }
+    // INSUFFICIENT_DATA state
+    else if (status === "INSUFFICIENT_DATA") {
+      document.getElementById('pred-label').textContent = 'PERIOD #---';
       document.getElementById('pred-text').textContent = 'WAIT';
       document.getElementById('pred-text').className = 'pred-val wait';
       document.getElementById('conf-text').textContent = 'Collecting historical records...';
+      document.getElementById('pred-status').innerHTML = '<span class="status-dot waiting"></span>Waiting for data';
     }
 
-    if (data && data.recent_history && data.recent_history.length > 0) {
+    // History section
+    if (data.recent_history && data.recent_history.length > 0) {
       var hist = data.recent_history;
       var wins = hist.filter(function(x) { return x.is_win; }).length;
       var total = hist.length;
@@ -165,7 +187,7 @@ async function updateData() {
 }
 
 updateData();
-setInterval(updateData, 2000);
+setInterval(updateData, 1500);
 </script>
 </body>
 </html>
@@ -174,40 +196,31 @@ setInterval(updateData, 2000);
 
 @router.get("/", response_class=HTMLResponse)
 async def serve_minimal_ui():
-    """Superfast zero-animation prediction UI focusing strictly on accurate data and timers."""
+    """Event-driven prediction UI with ANALYZING → READY state machine."""
     return HTML_PAGE
 
 
 @router.get("/api/v1/public/prediction")
 async def get_public_prediction(session: AsyncSession = Depends(get_session)):
-    """Public unauthenticated prediction readout with immutable audit trail history."""
+    """
+    Public prediction endpoint — reads from the event-driven pipeline.
+
+    The pipeline pre-computes predictions immediately after each new result is committed.
+    This endpoint is a fast cache reader, not an on-demand generator.
+    """
     try:
-        prediction = await get_prediction(session)
-        if not prediction:
-            prediction = {}
+        from app.services.prediction_pipeline import pipeline
+
+        prediction = pipeline.get_current_prediction()
+
+        # If pipeline has no prediction yet (first startup), force an initial generation
+        if prediction.get("status") == "INSUFFICIENT_DATA" and not prediction.get("upcoming_issue_id"):
+            await pipeline.force_refresh()
+            prediction = pipeline.get_current_prediction()
+
         prediction["server_time_ms"] = int(time.time() * 1000)
 
-        # Immutable Audit Trail: Lock original prediction before draw occurs
-        if prediction.get("prediction") in ("SMALL", "BIG") and prediction.get("upcoming_issue_id"):
-            try:
-                await persist_original_prediction(session, prediction)
-            except Exception as e:
-                from app.core.logging import get_logger
-                get_logger(__name__).warning("persist_original_prediction_route_error", error=str(e))
-
-        if prediction.get("status") == "INSUFFICIENT_DATA":
-            import asyncio
-            async def _bg_seed():
-                try:
-                    from app.core.database import async_session_factory
-                    from app.services.recovery_service import recover_missing_records
-                    async with async_session_factory() as s:
-                        async with s.begin():
-                            await recover_missing_records(s)
-                except Exception:
-                    pass
-            asyncio.create_task(_bg_seed())
-
+        # Attach recent accuracy history from immutable audit trail
         try:
             rows_query = await session.execute(
                 select(GameResult).order_by(desc(GameResult.issue_id)).limit(20)
@@ -231,4 +244,3 @@ async def get_public_prediction(session: AsyncSession = Depends(get_session)):
             "server_time_ms": int(time.time() * 1000),
             "recent_history": [],
         }
-    return prediction

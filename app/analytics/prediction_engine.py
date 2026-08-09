@@ -1035,20 +1035,26 @@ async def generate_prediction(
     real_confidence = round(min(0.92, 0.50 + 0.30 * (consensus_ratio - 0.50) + 0.18 * (winning_norm - 0.50)), 3)
 
     # Multi-Horizon Agreement & Anti-Overfitting Regime Shift Filter
+    # Uses lightweight 5-indicator subset to avoid redundant full-ensemble cost
     if len(sizes) >= 30:
-        micro_indicators = _run_all_indicators(
-            sizes[:15],
-            numbers[:15] if numbers else None,
-            colors[:15] if colors else None
-        )
-        macro_indicators = _run_all_indicators(
-            sizes[:min(100, len(sizes))],
-            numbers[:min(100, len(numbers))] if numbers else None,
-            colors[:min(100, len(colors))] if colors else None
-        )
+        micro_inds = {
+            "streak_reversal": _analyze_streak_indicator(sizes[:15]),
+            "markov_transition": _analyze_markov_transition_indicator(sizes[:15]),
+            "stat_frequency": _analyze_statistical_frequency_indicator(sizes[:15]),
+            "bayesian_posterior": _analyze_bayesian_posterior_indicator(sizes[:15]),
+            "runs_test": _analyze_runs_test_indicator(sizes[:15]),
+        }
+        macro_len = min(100, len(sizes))
+        macro_inds = {
+            "streak_reversal": _analyze_streak_indicator(sizes[:macro_len]),
+            "markov_transition": _analyze_markov_transition_indicator(sizes[:macro_len]),
+            "stat_frequency": _analyze_statistical_frequency_indicator(sizes[:macro_len]),
+            "bayesian_posterior": _analyze_bayesian_posterior_indicator(sizes[:macro_len]),
+            "runs_test": _analyze_runs_test_indicator(sizes[:macro_len]),
+        }
 
-        m_small, m_big, m_tot, _ = _score_indicators(micro_indicators, weights)
-        M_small, M_big, M_tot, _ = _score_indicators(macro_indicators, weights)
+        m_small, m_big, _, _ = _score_indicators(micro_inds, weights)
+        M_small, M_big, _, _ = _score_indicators(macro_inds, weights)
 
         micro_dir = "SMALL" if m_small >= m_big else "BIG"
         macro_dir = "SMALL" if M_small >= M_big else "BIG"
@@ -1168,7 +1174,6 @@ async def persist_original_prediction(session: AsyncSession, prediction_res: dic
                 agreeing_indicators=prediction_res.get("agreeing_indicators"),
                 active_indicators=prediction_res.get("active_indicators"),
                 created_at_ms=prediction_res.get("created_at_ms"),
-                expires_at_ms=prediction_res.get("expires_at_ms"),
                 created_at=datetime.now(timezone.utc),
             ).on_conflict_do_nothing(index_elements=["issue_id"])
             await session.execute(stmt)
@@ -1185,7 +1190,6 @@ async def persist_original_prediction(session: AsyncSession, prediction_res: dic
                     agreeing_indicators=prediction_res.get("agreeing_indicators"),
                     active_indicators=prediction_res.get("active_indicators"),
                     created_at_ms=prediction_res.get("created_at_ms"),
-                    expires_at_ms=prediction_res.get("expires_at_ms"),
                     created_at=datetime.now(timezone.utc),
                 )
                 session.add(ep)

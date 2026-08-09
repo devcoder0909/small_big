@@ -161,16 +161,15 @@ async def get_anomaly_stats(session: AsyncSession) -> dict:
 
 
 async def get_prediction(session: AsyncSession) -> dict:
-    """Get statistical prediction."""
-    cached = cache.get("prediction")
-    if cached:
-        return cached
+    """Get prediction from the event-driven pipeline."""
+    from app.services.prediction_pipeline import pipeline
 
-    settings = get_settings()
-    now = datetime.now(timezone.utc)
+    prediction = pipeline.get_current_prediction()
 
-    prediction = await generate_prediction(session, 500)
-    prediction["api_generated_at"] = now.isoformat()
+    # If pipeline has no prediction yet, attempt a force refresh
+    if prediction.get("status") == "INSUFFICIENT_DATA" and not prediction.get("upcoming_issue_id"):
+        await pipeline.force_refresh()
+        prediction = pipeline.get_current_prediction()
 
-    cache.set("prediction", prediction, settings.cache_latest_ttl)
     return prediction
+
