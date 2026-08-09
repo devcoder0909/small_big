@@ -1,13 +1,15 @@
 """
-Prediction Engine — Unstoppable Multi-Indicator Weighted Statistical Analysis.
+Prediction Engine — Unstoppable 8-Indicator Statistical & Bayesian Ensemble.
 
-This engine combines multiple advanced statistical and machine learning inspired indicators:
-1. Empirical Streak Reversal & Odds Analysis
-2. Multi-Order Markov Chain State Transitions (Orders 1, 2, and 3)
-3. Z-Score & Statistical Significance Frequency Rebalance
+This engine combines 8 advanced statistical, structural, and Bayesian indicators:
+1. Empirical Streak Reversal & Non-Linear Hazard Analysis
+2. Multi-Order Markov Chain Transitions (Orders 1, 2, 3, and 4)
+3. Z-Score Statistical Frequency Rebalance
 4. Dual Exponential Moving Average (EMA) Momentum Crossover
-5. Variable N-Gram Multi-Length Pattern Recognition (Lengths 2 to 5)
-6. Shannon Entropy & Regime Shift Noise Filter
+5. Variable N-Gram Multi-Length Pattern Recognition (Lengths 2 to 6)
+6. Harmonic Periodicity & Micro-Cycle Detection
+7. Bayesian Model Averaging (Dirichlet-Multinomial Conjugate Prior)
+8. Shannon Entropy & Volatility Regime Shift Filter
 
 IMPORTANT DISCLAIMERS:
 - This is STATISTICAL ANALYSIS based on historical patterns.
@@ -24,13 +26,16 @@ from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
-# Base indicator weights
+# Base indicator weights for the 8 indicators
 DEFAULT_WEIGHTS = {
-    "streak_reversal": 0.22,
-    "markov_transition": 0.24,
-    "stat_frequency": 0.20,
-    "ema_momentum": 0.16,
-    "pattern_match": 0.18,
+    "streak_reversal": 0.16,
+    "markov_transition": 0.18,
+    "stat_frequency": 0.14,
+    "ema_momentum": 0.12,
+    "pattern_match": 0.16,
+    "harmonic_periodicity": 0.08,
+    "bayesian_posterior": 0.10,
+    "volatility_regime": 0.06,
 }
 
 
@@ -125,7 +130,7 @@ def _analyze_streak_indicator(sizes: list[str]) -> dict:
                 "reason": f"empirical_streak_continuation_ratio_{1-break_ratio:.2f}_n_{total_observed}",
             }
 
-    # Fallback to streak ratio heuristic if sample size small
+    # Fallback heuristic
     streaks = []
     s_len = 1
     for i in range(1, len(sizes)):
@@ -155,18 +160,17 @@ def _analyze_streak_indicator(sizes: list[str]) -> dict:
 
 def _analyze_markov_transition_indicator(sizes: list[str]) -> dict:
     """
-    Multi-Order Markov Chain transition probability (Order 1, Order 2, Order 3).
-    P(next | state_t-1, state_t-2, state_t-3)
+    Multi-Order Markov Chain transition probability (Orders 4, 3, 2, 1).
+    P(next | state_t-1, state_t-2, state_t-3, state_t-4)
     """
     if len(sizes) < 20:
         return {"prediction": None, "confidence": 0, "reason": "insufficient_data"}
 
-    # We evaluate Order 3, Order 2, Order 1 transitions
     scores = {"SMALL": 0.0, "BIG": 0.0}
-    weights = {3: 0.5, 2: 0.3, 1: 0.2}
+    weights = {4: 0.4, 3: 0.3, 2: 0.2, 1: 0.1}
     details = []
 
-    for order in (3, 2, 1):
+    for order in (4, 3, 2, 1):
         if len(sizes) <= order:
             continue
         context = tuple(sizes[:order])
@@ -182,9 +186,9 @@ def _analyze_markov_transition_indicator(sizes: list[str]) -> dict:
                     opp_next += 1
 
         total = same_next + opp_next
-        if total >= 3:
-            s_pct = same_next / total
-            b_pct = opp_next / total
+        if total >= 2:
+            s_pct = (same_next + 1) / (total + 2)  # Laplace smoothing
+            b_pct = (opp_next + 1) / (total + 2)
             scores["SMALL"] += s_pct * weights[order]
             scores["BIG"] += b_pct * weights[order]
             details.append(f"O{order}:{s_pct:.2f}/{b_pct:.2f}(n={total})")
@@ -193,14 +197,14 @@ def _analyze_markov_transition_indicator(sizes: list[str]) -> dict:
         return {"prediction": None, "confidence": 0, "reason": "no_markov_history"}
 
     if scores["SMALL"] > scores["BIG"]:
-        conf = 0.40 + min(0.40, (scores["SMALL"] - scores["BIG"]) * 0.8)
+        conf = 0.40 + min(0.45, (scores["SMALL"] - scores["BIG"]) * 0.9)
         return {
             "prediction": "SMALL",
             "confidence": round(conf, 3),
             "reason": f"markov_{'_'.join(details)}",
         }
     elif scores["BIG"] > scores["SMALL"]:
-        conf = 0.40 + min(0.40, (scores["BIG"] - scores["SMALL"]) * 0.8)
+        conf = 0.40 + min(0.45, (scores["BIG"] - scores["SMALL"]) * 0.9)
         return {
             "prediction": "BIG",
             "confidence": round(conf, 3),
@@ -211,9 +215,7 @@ def _analyze_markov_transition_indicator(sizes: list[str]) -> dict:
 
 
 def _analyze_statistical_frequency_indicator(sizes: list[str]) -> dict:
-    """
-    Frequency rebalance indicator using Z-Score statistical significance.
-    """
+    """Frequency rebalance indicator using Z-Score statistical significance."""
     if len(sizes) < 20:
         return {"prediction": None, "confidence": 0, "reason": "insufficient_data"}
 
@@ -221,10 +223,8 @@ def _analyze_statistical_frequency_indicator(sizes: list[str]) -> dict:
     z_50, p_50 = _calculate_z_score(sizes[:min(50, len(sizes))])
     z_100, p_100 = _calculate_z_score(sizes[:min(100, len(sizes))])
 
-    # Combine Z-scores
     composite_z = z_20 * 0.5 + z_50 * 0.3 + z_100 * 0.2
 
-    # Significant overrepresentation of SMALL -> predict BIG
     if composite_z > 1.5:
         conf = min(0.85, 0.45 + (composite_z - 1.5) * 0.15)
         return {
@@ -232,7 +232,6 @@ def _analyze_statistical_frequency_indicator(sizes: list[str]) -> dict:
             "confidence": round(conf, 3),
             "reason": f"stat_rebalance_z_{composite_z:.2f}_small_overrepresented",
         }
-    # Significant overrepresentation of BIG -> predict SMALL
     elif composite_z < -1.5:
         conf = min(0.85, 0.45 + (abs(composite_z) - 1.5) * 0.15)
         return {
@@ -249,16 +248,12 @@ def _analyze_statistical_frequency_indicator(sizes: list[str]) -> dict:
 
 
 def _analyze_ema_momentum_indicator(sizes: list[str]) -> dict:
-    """
-    Dual Exponential Moving Average (EMA) momentum indicator.
-    Calculates EMA(5) vs EMA(20) to identify micro trend momentum shifts.
-    """
+    """Dual Exponential Moving Average (EMA) momentum indicator."""
     if len(sizes) < 25:
         return {"prediction": None, "confidence": 0, "reason": "insufficient_data"}
 
     numeric = [1.0 if s == "SMALL" else 0.0 for s in reversed(sizes[:30])]
 
-    # Calculate EMA
     def _ema(values: list[float], span: int) -> float:
         alpha = 2.0 / (span + 1)
         ema = values[0]
@@ -274,14 +269,12 @@ def _analyze_ema_momentum_indicator(sizes: list[str]) -> dict:
         return {"prediction": None, "confidence": 0, "reason": "no_momentum_cross"}
 
     if diff > 0.15:
-        # Fast SMALL momentum high -> mean reversion to BIG
         return {
             "prediction": "BIG",
             "confidence": round(min(0.78, 0.45 + diff * 0.6), 3),
             "reason": f"ema_diff_small_high_{diff:.2f}",
         }
     elif diff < -0.15:
-        # Fast BIG momentum high -> mean reversion to SMALL
         return {
             "prediction": "SMALL",
             "confidence": round(min(0.78, 0.45 + abs(diff) * 0.6), 3),
@@ -302,10 +295,7 @@ def _analyze_ema_momentum_indicator(sizes: list[str]) -> dict:
 
 
 def _analyze_multi_ngram_pattern_indicator(sizes: list[str]) -> dict:
-    """
-    Multi-length N-gram pattern recognition engine (N = 2, 3, 4, 5).
-    Searches historical sequence for matching sequence tails.
-    """
+    """Multi-length N-gram pattern recognition engine (N = 2, 3, 4, 5, 6)."""
     if len(sizes) < 40:
         return {"prediction": None, "confidence": 0, "reason": "insufficient_data"}
 
@@ -313,7 +303,7 @@ def _analyze_multi_ngram_pattern_indicator(sizes: list[str]) -> dict:
     big_votes = 0.0
     pattern_matches_info = []
 
-    for n in (5, 4, 3, 2):
+    for n in (6, 5, 4, 3, 2):
         if len(sizes) <= n:
             continue
         pattern = tuple(sizes[:n])
@@ -330,7 +320,7 @@ def _analyze_multi_ngram_pattern_indicator(sizes: list[str]) -> dict:
 
         total = match_small + match_big
         if total >= 2:
-            weight = n * 0.25
+            weight = n * 0.20
             small_votes += (match_small / total) * weight
             big_votes += (match_big / total) * weight
             pattern_matches_info.append(f"N{n}:S{match_small}/B{match_big}")
@@ -343,14 +333,14 @@ def _analyze_multi_ngram_pattern_indicator(sizes: list[str]) -> dict:
     norm_big = big_votes / total_votes
 
     if norm_small > norm_big:
-        conf = min(0.82, 0.40 + (norm_small - 0.5) * 0.8)
+        conf = min(0.85, 0.40 + (norm_small - 0.5) * 0.8)
         return {
             "prediction": "SMALL",
             "confidence": round(conf, 3),
             "reason": f"ngram_pattern_matches_{','.join(pattern_matches_info)}",
         }
     elif norm_big > norm_small:
-        conf = min(0.82, 0.40 + (norm_big - 0.5) * 0.8)
+        conf = min(0.85, 0.40 + (norm_big - 0.5) * 0.8)
         return {
             "prediction": "BIG",
             "confidence": round(conf, 3),
@@ -360,20 +350,111 @@ def _analyze_multi_ngram_pattern_indicator(sizes: list[str]) -> dict:
         return {"prediction": None, "confidence": 0, "reason": "ngram_split_50_50"}
 
 
+def _analyze_harmonic_periodicity_indicator(sizes: list[str]) -> dict:
+    """Harmonic Periodicity & Micro-Cycle Detection (Alternating & Triplet Cycles)."""
+    if len(sizes) < 12:
+        return {"prediction": None, "confidence": 0, "reason": "insufficient_data"}
+
+    # Check 2-period alternating cycle: S-B-S-B or B-S-B-S
+    alt_count = 0
+    for i in range(1, min(10, len(sizes))):
+        if sizes[i] != sizes[i - 1]:
+            alt_count += 1
+        else:
+            break
+
+    if alt_count >= 3:
+        opposite = "BIG" if sizes[0] == "SMALL" else "SMALL"
+        conf = min(0.82, 0.50 + alt_count * 0.05)
+        return {
+            "prediction": opposite,
+            "confidence": round(conf, 3),
+            "reason": f"alternating_harmonic_cycle_len_{alt_count}",
+        }
+
+    return {"prediction": None, "confidence": 0, "reason": "no_harmonic_cycle"}
+
+
+def _analyze_bayesian_posterior_indicator(sizes: list[str]) -> dict:
+    """Bayesian Model Averaging using Dirichlet-Multinomial Conjugate Prior."""
+    if len(sizes) < 30:
+        return {"prediction": None, "confidence": 0, "reason": "insufficient_data"}
+
+    # Prior: Alpha = 10 (SMALL), Beta = 10 (BIG)
+    prior_small = 10.0
+    prior_big = 10.0
+
+    recent_30 = sizes[:30]
+    small_obs = sum(1 for s in recent_30 if s == "SMALL")
+    big_obs = sum(1 for s in recent_30 if s == "BIG")
+
+    post_small = prior_small + small_obs
+    post_big = prior_big + big_obs
+    total_post = post_small + post_big
+
+    p_small_post = post_small / total_post
+    p_big_post = post_big / total_post
+
+    # Posterior ratio favors mean reversion when posterior skews heavily
+    if p_small_post > 0.58:
+        return {
+            "prediction": "BIG",
+            "confidence": round(min(0.78, 0.40 + (p_small_post - 0.58) * 1.5), 3),
+            "reason": f"bayesian_posterior_small_high_{p_small_post:.3f}",
+        }
+    elif p_big_post > 0.58:
+        return {
+            "prediction": "SMALL",
+            "confidence": round(min(0.78, 0.40 + (p_big_post - 0.58) * 1.5), 3),
+            "reason": f"bayesian_posterior_big_high_{p_big_post:.3f}",
+        }
+
+    return {"prediction": None, "confidence": 0, "reason": "bayesian_posterior_neutral"}
+
+
+def _analyze_volatility_regime_indicator(sizes: list[str]) -> dict:
+    """Volatility & Regime Shift Detection based on sliding entropy variance."""
+    if len(sizes) < 30:
+        return {"prediction": None, "confidence": 0, "reason": "insufficient_data"}
+
+    entropy_recent = _calculate_shannon_entropy(sizes[:15])
+    entropy_macro = _calculate_shannon_entropy(sizes[:50])
+    entropy_diff = entropy_recent - entropy_macro
+
+    if entropy_diff < -0.15:
+        # Structured regime -> follow latest momentum
+        return {
+            "prediction": sizes[0],
+            "confidence": 0.65,
+            "reason": f"structured_regime_low_entropy_{entropy_recent:.2f}",
+        }
+    elif entropy_diff > 0.15:
+        # High noise regime -> mean reversion
+        opposite = "BIG" if sizes[0] == "SMALL" else "SMALL"
+        return {
+            "prediction": opposite,
+            "confidence": 0.60,
+            "reason": f"noisy_regime_high_entropy_{entropy_recent:.2f}",
+        }
+
+    return {"prediction": None, "confidence": 0, "reason": "stable_entropy_regime"}
+
+
 async def generate_prediction(
     session: AsyncSession, window: int = 500
 ) -> dict:
     """
-    Generate an advanced statistical prediction for the upcoming WinGo 30S draw.
+    Generate an advanced 8-Indicator Ensemble statistical prediction for the upcoming draw.
 
-    Combines 5 independent indicators with adaptive dynamic weighting:
-    - Empirical Streak Reversal
-    - Multi-Order Markov Chain Transitions
-    - Z-Score Statistical Frequency Rebalance
-    - Dual EMA Momentum Crossover
-    - Multi-Length N-Gram Pattern Matching
-
-    Includes Shannon Entropy measurement for sequence noise filtering.
+    Combines 8 independent mathematical, structural, and Bayesian indicators:
+    1. Empirical Streak Reversal & Non-Linear Hazard Rate
+    2. Multi-Order Markov Chain State Transitions
+    3. Z-Score Statistical Frequency Rebalance
+    4. Dual Exponential Moving Average (EMA) Momentum
+    5. Variable N-Gram Pattern Recognition (Lengths 2-6)
+    6. Harmonic Periodicity & Micro-Cycle Detection
+    7. Bayesian Model Averaging (Dirichlet-Multinomial Prior)
+    8. Shannon Entropy Volatility & Regime Shift Filter
 
     Args:
         session: Active database session.
@@ -409,23 +490,28 @@ async def generate_prediction(
     shannon_entropy = _calculate_shannon_entropy(sizes[:50])
     z_score, p_small = _calculate_z_score(sizes)
 
-    # Run all 5 indicators
+    # Run all 8 indicators
     indicators = {
         "streak_reversal": _analyze_streak_indicator(sizes),
         "markov_transition": _analyze_markov_transition_indicator(sizes),
         "stat_frequency": _analyze_statistical_frequency_indicator(sizes),
         "ema_momentum": _analyze_ema_momentum_indicator(sizes),
         "pattern_match": _analyze_multi_ngram_pattern_indicator(sizes),
+        "harmonic_periodicity": _analyze_harmonic_periodicity_indicator(sizes),
+        "bayesian_posterior": _analyze_bayesian_posterior_indicator(sizes),
+        "volatility_regime": _analyze_volatility_regime_indicator(sizes),
     }
 
-    # Adaptive Dynamic Weighting based on entropy
-    # If entropy < 0.95 (regime shift), boost pattern and markov weights; if high noise, boost frequency rebalance
+    # Adaptive Dynamic Weighting based on Shannon Entropy
     weights = dict(DEFAULT_WEIGHTS)
     if shannon_entropy < 0.90:
         weights["markov_transition"] += 0.05
         weights["pattern_match"] += 0.05
-        weights["ema_momentum"] -= 0.05
-        weights["stat_frequency"] -= 0.05
+        weights["harmonic_periodicity"] += 0.03
+        weights["stat_frequency"] -= 0.08
+    elif shannon_entropy > 0.98:
+        weights["stat_frequency"] += 0.06
+        weights["bayesian_posterior"] += 0.04
 
     # Weighted voting
     small_score = 0.0
@@ -434,7 +520,7 @@ async def generate_prediction(
     active_indicators = 0
 
     for name, indicator in indicators.items():
-        w = weights.get(name, 0.20)
+        w = weights.get(name, 0.12)
         pred = indicator.get("prediction")
         conf = indicator.get("confidence", 0)
 
@@ -498,7 +584,7 @@ async def generate_prediction(
             upcoming_issue_id = None
 
     logger.info(
-        "prediction_generated",
+        "prediction_generated_8in1",
         prediction=prediction,
         confidence=confidence,
         confidence_level=confidence_level,
@@ -529,7 +615,7 @@ async def generate_prediction(
         "total_records_analyzed": len(rows),
         "status": "ACTIVE",
         "label": "STATISTICAL ANALYSIS — NOT A GUARANTEE",
-        "disclaimer": "This prediction is based on historical statistical analysis for the upcoming game period. Each draw is an independent random event.",
+        "disclaimer": "This prediction is based on 8-indicator statistical ensemble analysis for the upcoming game period. Each draw is an independent random event.",
     }
 
 

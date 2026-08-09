@@ -1,4 +1,4 @@
-"""Unit tests for the upgraded Prediction Engine."""
+"""Unit tests for the upgraded 8-Indicator Prediction Engine."""
 
 import pytest
 from datetime import datetime, timezone
@@ -11,22 +11,22 @@ from app.analytics.prediction_engine import (
     _analyze_statistical_frequency_indicator,
     _analyze_ema_momentum_indicator,
     _analyze_multi_ngram_pattern_indicator,
+    _analyze_harmonic_periodicity_indicator,
+    _analyze_bayesian_posterior_indicator,
+    _analyze_volatility_regime_indicator,
 )
 from app.models.game_result import GameResult
 
 
 def test_shannon_entropy_calculation():
     """Test Shannon entropy calculation on uniform vs skewed vs single-class sequences."""
-    # Equal distribution -> Maximum entropy (1.0)
     sizes_equal = ["SMALL"] * 50 + ["BIG"] * 50
     assert _calculate_shannon_entropy(sizes_equal) == 1.0
 
-    # Skewed distribution -> Lower entropy (< 1.0)
     sizes_skewed = ["SMALL"] * 80 + ["BIG"] * 20
     entropy = _calculate_shannon_entropy(sizes_skewed)
     assert 0 < entropy < 1.0
 
-    # Pure single class -> Zero entropy
     sizes_pure = ["SMALL"] * 50
     assert _calculate_shannon_entropy(sizes_pure) == 0.0
 
@@ -40,13 +40,12 @@ def test_z_score_calculation():
 
     sizes_small_heavy = ["SMALL"] * 40 + ["BIG"] * 10
     z_heavy, p_heavy = _calculate_z_score(sizes_small_heavy)
-    assert z_heavy > 2.0  # Statistically significant deviation
+    assert z_heavy > 2.0
     assert p_heavy == 0.8
 
 
 def test_streak_indicator():
     """Test streak indicator prediction on long streak."""
-    # Current streak of 6 SMALLs
     sizes = ["SMALL"] * 6 + ["BIG", "BIG", "SMALL", "BIG", "SMALL", "BIG"]
     res = _analyze_streak_indicator(sizes)
     assert res["prediction"] in ("BIG", "SMALL")
@@ -70,11 +69,33 @@ def test_ema_momentum_indicator():
 
 def test_multi_ngram_pattern_indicator():
     """Test N-gram pattern indicator on pattern repetition."""
-    # Repeating sequence of SMALL, BIG, SMALL, BIG...
     sizes = ["SMALL", "BIG"] * 30
     res = _analyze_multi_ngram_pattern_indicator(sizes)
     assert res["prediction"] is not None
     assert res["confidence"] > 0
+
+
+def test_harmonic_periodicity_indicator():
+    """Test Harmonic periodicity indicator on alternating micro-cycle."""
+    sizes = ["SMALL", "BIG", "SMALL", "BIG", "SMALL", "BIG", "SMALL", "BIG", "SMALL", "BIG", "SMALL", "BIG"]
+    res = _analyze_harmonic_periodicity_indicator(sizes)
+    assert res["prediction"] == "BIG"
+    assert res["confidence"] > 0.50
+
+
+def test_bayesian_posterior_indicator():
+    """Test Bayesian posterior model averaging on skewed sequence."""
+    sizes = ["SMALL"] * 25 + ["BIG"] * 5
+    res = _analyze_bayesian_posterior_indicator(sizes)
+    assert res["prediction"] == "BIG"
+    assert res["confidence"] > 0.40
+
+
+def test_volatility_regime_indicator():
+    """Test Volatility & Regime shift indicator."""
+    sizes = ["SMALL"] * 15 + ["BIG", "SMALL"] * 15
+    res = _analyze_volatility_regime_indicator(sizes)
+    assert res["prediction"] is not None
 
 
 @pytest.mark.asyncio
@@ -103,4 +124,5 @@ async def test_end_to_end_prediction_generation(db_session):
     assert prediction["confidence"] >= 0.40
     assert "shannon_entropy" in prediction
     assert "z_score" in prediction
+    assert prediction["active_indicators"] >= 4
     assert prediction["upcoming_issue_id"] == str(1000 + len(mock_sizes))
