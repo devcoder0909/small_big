@@ -9,6 +9,7 @@ from app.core import get_settings
 from app.core.database import async_session_factory
 from app.core.logging import setup_logging, get_logger
 from app.models.raw_response import RawResponse
+from app.models.game_result import GameResult
 
 logger = get_logger(__name__)
 
@@ -33,6 +34,41 @@ async def cleanup_old_raw_responses():
     return {"deleted": deleted, "cutoff": cutoff.isoformat()}
 
 
+async def prune_oldest_game_results(max_records: int = 50000):
+    """
+    Ensure total game_results count never exceeds max_records.
+
+    Deletes records older than the 50,000th latest issue_id.
+    Prevents PostgreSQL disk space exhaustion on 512MB RAM plans.
+    """
+    async with async_session_factory() as session:
+        async with session.begin():
+            # Find the threshold issue_id for the 50,000th record
+            query = (
+                select(GameResult.issue_id)
+                .order_by(GameResult.issue_id.desc())
+                .offset(max_records)
+                .limit(1)
+            )
+            result = await session.execute(query)
+            cutoff_issue = result.scalar_one_or_none()
+
+            if cutoff_issue:
+                del_result = await session.execute(
+                    delete(GameResult).where(GameResult.issue_id < cutoff_issue)
+                )
+                pruned_count = del_result.rowcount
+                logger.info(
+                    "game_results_pruned",
+                    pruned=pruned_count,
+                    cutoff_issue=cutoff_issue,
+                    max_records=max_records,
+                )
+                return {"pruned": pruned_count, "cutoff_issue": cutoff_issue}
+
+    return {"pruned": 0, "cutoff_issue": None}
+
+
 async def run_maintenance():
     """Run all maintenance tasks."""
     setup_logging()
@@ -45,6 +81,12 @@ async def run_maintenance():
     except Exception as e:
         logger.error("maintenance_error", task="raw_cleanup", error=str(e))
         results["raw_cleanup"] = {"error": str(e)}
+
+    try:
+        results["game_prune"] = await prune_oldest_game_results(50000)
+    except Exception as e:
+        logger.error("maintenance_error", task="game_prune", error=str(e))
+        results["game_prune"] = {"error": str(e)}
 
     logger.info("maintenance_complete", results=results)
     return results
