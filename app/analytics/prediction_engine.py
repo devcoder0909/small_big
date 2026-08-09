@@ -1,7 +1,7 @@
 """
-Prediction Engine — Unstoppable 8-Indicator Statistical & Bayesian Ensemble.
+Prediction Engine — 10-Indicator God-Mode Statistical & Bayesian Ensemble.
 
-This engine combines 8 advanced statistical, structural, and Bayesian indicators:
+This engine combines 10 advanced statistical, structural, and Bayesian indicators:
 1. Empirical Streak Reversal & Non-Linear Hazard Analysis
 2. Multi-Order Markov Chain Transitions (Orders 1, 2, 3, and 4)
 3. Z-Score Statistical Frequency Rebalance
@@ -10,6 +10,8 @@ This engine combines 8 advanced statistical, structural, and Bayesian indicators
 6. Harmonic Periodicity & Micro-Cycle Detection
 7. Bayesian Model Averaging (Dirichlet-Multinomial Conjugate Prior)
 8. Shannon Entropy & Volatility Regime Shift Filter
+9. Pearson's Chi-Square Goodness-of-Fit Skew Detection
+10. Wald-Wolfowitz Runs Test Randomness Detector
 
 IMPORTANT DISCLAIMERS:
 - This is STATISTICAL ANALYSIS based on historical patterns.
@@ -26,16 +28,18 @@ from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
-# Base indicator weights for the 8 indicators
+# Base indicator weights for the 10 indicators
 DEFAULT_WEIGHTS = {
-    "streak_reversal": 0.16,
-    "markov_transition": 0.18,
-    "stat_frequency": 0.14,
-    "ema_momentum": 0.12,
-    "pattern_match": 0.16,
-    "harmonic_periodicity": 0.08,
-    "bayesian_posterior": 0.10,
-    "volatility_regime": 0.06,
+    "streak_reversal": 0.14,
+    "markov_transition": 0.16,
+    "stat_frequency": 0.12,
+    "ema_momentum": 0.10,
+    "pattern_match": 0.14,
+    "harmonic_periodicity": 0.07,
+    "bayesian_posterior": 0.09,
+    "volatility_regime": 0.05,
+    "chi_square_skew": 0.07,
+    "runs_test": 0.06,
 }
 
 
@@ -451,12 +455,9 @@ def _analyze_chi_square_goodness_of_fit_indicator(sizes: list[str]) -> dict:
     o_big = window.count("BIG")
     expected = n / 2.0
 
-    # Pearson Chi-Square statistic = sum((O - E)^2 / E)
     chi_sq = ((o_small - expected) ** 2 + (o_big - expected) ** 2) / expected
 
-    # Critical value at df=1, p=0.05 is 3.841
     if chi_sq >= 3.841:
-        # Significant skew -> Mean reversion signal
         target = "BIG" if o_small > o_big else "SMALL"
         conf = min(0.85, 0.55 + (chi_sq - 3.841) * 0.05)
         return {
@@ -468,22 +469,115 @@ def _analyze_chi_square_goodness_of_fit_indicator(sizes: list[str]) -> dict:
     return {"prediction": None, "confidence": 0, "reason": "chi_square_uniform_distribution"}
 
 
+def _analyze_runs_test_indicator(sizes: list[str]) -> dict:
+    """
+    Wald-Wolfowitz Runs Test for randomness deviation.
+    Detects if the sequence has significantly fewer or more runs than expected,
+    signaling clustering (trend continuation) or oscillation (mean reversion).
+    """
+    if len(sizes) < 20:
+        return {"prediction": None, "confidence": 0, "reason": "insufficient_data"}
+
+    window = sizes[:50]
+    n = len(window)
+    n1 = window.count("SMALL")
+    n2 = n - n1
+
+    if n1 == 0 or n2 == 0:
+        return {"prediction": None, "confidence": 0, "reason": "runs_test_single_class"}
+
+    # Count actual runs
+    runs = 1
+    for i in range(1, n):
+        if window[i] != window[i - 1]:
+            runs += 1
+
+    # Expected runs and standard deviation under H0 (random)
+    expected_runs = 1 + (2 * n1 * n2) / n
+    std_runs = math.sqrt((2 * n1 * n2 * (2 * n1 * n2 - n)) / (n * n * (n - 1)))
+
+    if std_runs == 0:
+        return {"prediction": None, "confidence": 0, "reason": "runs_test_degenerate"}
+
+    z_runs = (runs - expected_runs) / std_runs
+
+    # Significantly fewer runs => clustering => follow trend
+    if z_runs < -1.96:
+        conf = min(0.82, 0.50 + abs(z_runs + 1.96) * 0.08)
+        return {
+            "prediction": window[0],  # Continue current trend
+            "confidence": round(conf, 3),
+            "reason": f"runs_test_clustering_z_{z_runs:.2f}",
+        }
+
+    # Significantly more runs => oscillation => opposite of latest
+    if z_runs > 1.96:
+        opposite = "BIG" if window[0] == "SMALL" else "SMALL"
+        conf = min(0.82, 0.50 + (z_runs - 1.96) * 0.08)
+        return {
+            "prediction": opposite,
+            "confidence": round(conf, 3),
+            "reason": f"runs_test_oscillation_z_{z_runs:.2f}",
+        }
+
+    return {"prediction": None, "confidence": 0, "reason": f"runs_test_random_z_{z_runs:.2f}"}
+
+
+def _run_all_indicators(sizes: list[str]) -> dict:
+    """Run all 10 statistical indicators and return the indicators dict."""
+    return {
+        "streak_reversal": _analyze_streak_indicator(sizes),
+        "markov_transition": _analyze_markov_transition_indicator(sizes),
+        "stat_frequency": _analyze_statistical_frequency_indicator(sizes),
+        "ema_momentum": _analyze_ema_momentum_indicator(sizes),
+        "pattern_match": _analyze_multi_ngram_pattern_indicator(sizes),
+        "harmonic_periodicity": _analyze_harmonic_periodicity_indicator(sizes),
+        "bayesian_posterior": _analyze_bayesian_posterior_indicator(sizes),
+        "volatility_regime": _analyze_volatility_regime_indicator(sizes),
+        "chi_square_skew": _analyze_chi_square_goodness_of_fit_indicator(sizes),
+        "runs_test": _analyze_runs_test_indicator(sizes),
+    }
+
+
+def _score_indicators(indicators: dict, weights: dict) -> tuple:
+    """
+    Score indicators using squared-confidence amplification.
+    High-confidence signals get exponentially more influence than low-confidence noise.
+
+    Returns (small_score, big_score, total_weight, active_indicators).
+    """
+    small_score = 0.0
+    big_score = 0.0
+    total_weight = 0.0
+    active = 0
+
+    for name, indicator in indicators.items():
+        w = weights.get(name, 0.08)
+        pred = indicator.get("prediction")
+        conf = indicator.get("confidence", 0)
+
+        if pred and conf > 0:
+            # Squared confidence amplification: high-confidence indicators dominate
+            amplified_conf = conf * conf
+            weighted_val = w * amplified_conf
+            if pred == "SMALL":
+                small_score += weighted_val
+            else:
+                big_score += weighted_val
+            total_weight += w * conf  # Normalize by linear weight
+            active += 1
+
+    return small_score, big_score, total_weight, active
+
+
 async def generate_prediction(
     session: AsyncSession, window: int = 500
 ) -> dict:
     """
-    Generate an advanced 9-Indicator Ensemble statistical prediction for the upcoming draw.
+    Generate an advanced 10-Indicator God-Mode Ensemble statistical prediction.
 
-    Combines 9 independent mathematical, structural, Bayesian, and Chi-Square indicators:
-    1. Empirical Streak Reversal & Non-Linear Hazard Rate
-    2. Multi-Order Markov Chain State Transitions
-    3. Z-Score Statistical Frequency Rebalance
-    4. Dual Exponential Moving Average (EMA) Momentum
-    5. Variable N-Gram Pattern Recognition (Lengths 2-6)
-    6. Harmonic Periodicity & Micro-Cycle Detection
-    7. Bayesian Model Averaging (Dirichlet-Multinomial Prior)
-    8. Shannon Entropy Volatility & Regime Shift Filter
-    9. Pearson's Chi-Square Goodness-of-Fit Skew Detection
+    Combines 10 independent mathematical, structural, Bayesian, and randomness-test indicators
+    with squared-confidence amplification, multi-tier confluence boosting, and AI LLM reasoning.
 
     Args:
         session: Active database session.
@@ -519,26 +613,24 @@ async def generate_prediction(
     shannon_entropy = _calculate_shannon_entropy(sizes[:50])
     z_score, p_small = _calculate_z_score(sizes)
 
-    # Run all 9 indicators
-    indicators = {
-        "streak_reversal": _analyze_streak_indicator(sizes),
-        "markov_transition": _analyze_markov_transition_indicator(sizes),
-        "stat_frequency": _analyze_statistical_frequency_indicator(sizes),
-        "ema_momentum": _analyze_ema_momentum_indicator(sizes),
-        "pattern_match": _analyze_multi_ngram_pattern_indicator(sizes),
-        "harmonic_periodicity": _analyze_harmonic_periodicity_indicator(sizes),
-        "bayesian_posterior": _analyze_bayesian_posterior_indicator(sizes),
-        "volatility_regime": _analyze_volatility_regime_indicator(sizes),
-        "chi_square_skew": _analyze_chi_square_goodness_of_fit_indicator(sizes),
-    }
+    # Run all 10 indicators
+    indicators = _run_all_indicators(sizes)
 
     # Fetch AI Pattern Reasoning via Key Rotation (Groq, OpenRouter, Gemini)
+    # Pass full indicator breakdown to AI for contextual reasoning
     ai_reasoning = None
     try:
         from app.analytics.ai_rotator import fetch_ai_prediction
-        ai_res = await fetch_ai_prediction(
-            sizes, {"entropy": shannon_entropy, "z_score": z_score}
-        )
+        indicator_summary = {
+            "entropy": shannon_entropy,
+            "z_score": z_score,
+            "indicator_signals": {
+                name: {"pred": ind.get("prediction"), "conf": ind.get("confidence", 0)}
+                for name, ind in indicators.items()
+                if ind.get("prediction")
+            },
+        }
+        ai_res = await fetch_ai_prediction(sizes, indicator_summary)
         if ai_res and ai_res.get("ai_prediction"):
             ai_reasoning = ai_res
             indicators["ai_pattern_reasoning"] = {
@@ -551,36 +643,30 @@ async def generate_prediction(
     except Exception as ai_err:
         logger.warning("ai_rotator_integration_warning", error=str(ai_err))
 
-    # Adaptive Dynamic Weighting based on Shannon Entropy
+    # Adaptive Dynamic Weighting based on Shannon Entropy & Z-Score
     weights = dict(DEFAULT_WEIGHTS)
     if shannon_entropy < 0.90:
+        # Low entropy = structured patterns => boost pattern-based indicators
         weights["markov_transition"] += 0.05
         weights["pattern_match"] += 0.05
         weights["harmonic_periodicity"] += 0.03
+        weights["runs_test"] += 0.02
         weights["stat_frequency"] -= 0.08
     elif shannon_entropy > 0.98:
-        weights["stat_frequency"] += 0.06
+        # High entropy = noisy => boost statistical rebalance indicators
+        weights["stat_frequency"] += 0.05
         weights["bayesian_posterior"] += 0.04
+        weights["chi_square_skew"] += 0.03
 
-    # Weighted voting
-    small_score = 0.0
-    big_score = 0.0
-    total_weight = 0.0
-    active_indicators = 0
+    # Z-Score extreme deviation boost
+    if abs(z_score) > 2.0:
+        weights["stat_frequency"] += 0.04
+        weights["chi_square_skew"] += 0.03
 
-    for name, indicator in indicators.items():
-        w = weights.get(name, 0.12)
-        pred = indicator.get("prediction")
-        conf = indicator.get("confidence", 0)
-
-        if pred and conf > 0:
-            weighted_val = w * conf
-            if pred == "SMALL":
-                small_score += weighted_val
-            else:
-                big_score += weighted_val
-            total_weight += w
-            active_indicators += 1
+    # Squared-confidence weighted voting
+    small_score, big_score, total_weight, active_indicators = _score_indicators(
+        indicators, weights
+    )
 
     if total_weight == 0:
         return {
@@ -616,7 +702,9 @@ async def generate_prediction(
         if ind.get("prediction") == prediction and ind.get("confidence", 0) > 0
     )
 
-    # Micro-Macro Multi-Window Confluence Boosting (Micro 10 vs Medium 30 vs Macro 100)
+    # === MULTI-TIER CONFLUENCE BOOSTING ===
+
+    # Tier 1: Micro-Macro Multi-Window Agreement (10 vs 30 vs 100 draw windows)
     if len(sizes) >= 30:
         micro_sizes = sizes[:10]
         micro_small = sum(1 for s in micro_sizes if s == "SMALL")
@@ -626,8 +714,19 @@ async def generate_prediction(
         if micro_dir == prediction and agreeing >= 4:
             confidence = round(min(0.95, confidence + 0.08), 3)
 
+    # Tier 2: Super-majority boost (7+ of 10 indicators agree)
+    if agreeing >= 7 and active_indicators >= 8:
+        confidence = round(min(0.96, confidence + 0.10), 3)
+    elif agreeing >= 6 and active_indicators >= 7:
+        confidence = round(min(0.93, confidence + 0.06), 3)
+
+    # Tier 3: Streak exhaustion emergency boost
+    streak = _get_current_streak(sizes)
+    if streak["length"] >= 5 and prediction != streak["size"]:
+        confidence = round(min(0.94, confidence + 0.07), 3)
+
     # Classify confidence level
-    if confidence >= 0.70:
+    if confidence >= 0.75:
         confidence_level = "HIGH"
     elif confidence >= 0.55:
         confidence_level = "MEDIUM"
@@ -643,7 +742,7 @@ async def generate_prediction(
             upcoming_issue_id = None
 
     logger.info(
-        "prediction_generated_8in1",
+        "prediction_generated_10in1",
         prediction=prediction,
         confidence=confidence,
         confidence_level=confidence_level,
@@ -674,7 +773,7 @@ async def generate_prediction(
         "total_records_analyzed": len(rows),
         "status": "ACTIVE",
         "label": "STATISTICAL ANALYSIS — NOT A GUARANTEE",
-        "disclaimer": "This prediction is based on 8-indicator statistical ensemble analysis for the upcoming game period. Each draw is an independent random event.",
+        "disclaimer": "This prediction is based on 10-indicator statistical ensemble analysis for the upcoming game period. Each draw is an independent random event.",
     }
 
 
@@ -694,13 +793,17 @@ def _get_current_streak(sizes: list[str]) -> dict:
 
 def evaluate_recent_accuracy(rows: list) -> list[dict]:
     """
-    Evaluate accuracy of statistical ensemble predictions on recent draws.
+    Evaluate accuracy of the full 10-indicator ensemble on recent draws.
+
+    For each of the last 5 draws, re-runs all 10 indicators on the data
+    that was available BEFORE that draw occurred, then checks if the
+    ensemble prediction matched the actual result.
 
     Args:
         rows: GameResult rows ordered by issue_id desc.
 
     Returns:
-        List of dicts with issue_id, result_number, calculated_size, prediction, and is_win.
+        List of dicts with issue_id, result, size, predicted_size, is_win.
     """
     if len(rows) < 10:
         return []
@@ -712,20 +815,17 @@ def evaluate_recent_accuracy(rows: list) -> list[dict]:
         if len(prior_sizes) < 5:
             continue
 
-        m_trans = _analyze_markov_transition_indicator(prior_sizes)
-        st_freq = _analyze_statistical_frequency_indicator(prior_sizes)
-        ngram_p = _analyze_multi_ngram_pattern_indicator(prior_sizes)
+        # Run full 10-indicator ensemble on prior data
+        indicators = _run_all_indicators(prior_sizes)
+        weights = dict(DEFAULT_WEIGHTS)
+        small_score, big_score, total_weight, active = _score_indicators(
+            indicators, weights
+        )
 
-        votes = [
-            m_trans.get("prediction"),
-            st_freq.get("prediction"),
-            ngram_p.get("prediction"),
-        ]
-        valid_votes = [v for v in votes if v in ("SMALL", "BIG")]
-        if valid_votes:
-            small_c = valid_votes.count("SMALL")
-            big_c = valid_votes.count("BIG")
-            pred = "SMALL" if small_c >= big_c else "BIG"
+        if total_weight > 0:
+            norm_small = small_score / total_weight
+            norm_big = big_score / total_weight
+            pred = "SMALL" if norm_small > norm_big else "BIG"
         else:
             pred = prior_sizes[0]
 

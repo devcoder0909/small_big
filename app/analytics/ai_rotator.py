@@ -102,11 +102,19 @@ async def fetch_ai_prediction(sizes: list[str], stat_summary: dict) -> dict | No
     if not providers:
         return None
 
-    recent_sequence = ", ".join(sizes[:20])
+    recent_sequence = ", ".join(sizes[:40])
     prompt = (
-        f"You are a master mathematical pattern analyst for binary lottery sequence forecasting.\n"
-        f"Recent 20 draws (newest first): [{recent_sequence}]\n"
-        f"Local Statistical Indicator Output: {json.dumps(stat_summary)}\n\n"
+        f"You are a world-class mathematical pattern analyst specializing in binary sequence forecasting.\n"
+        f"Your job: analyze the sequence and statistical indicators below, then predict the NEXT outcome.\n\n"
+        f"RECENT 40 DRAWS (newest first): [{recent_sequence}]\n\n"
+        f"LOCAL 10-INDICATOR STATISTICAL ENGINE OUTPUT:\n{json.dumps(stat_summary, indent=2)}\n\n"
+        f"ANALYSIS REQUIRED:\n"
+        f"1. Check streak exhaustion patterns\n"
+        f"2. Check frequency imbalance (law of large numbers reversion)\n"
+        f"3. Check Markov transition probabilities\n"
+        f"4. Check N-gram pattern repetitions\n"
+        f"5. Check regime (structured vs chaotic) from entropy\n"
+        f"6. Weigh indicator consensus vs disagreement\n\n"
         f"Respond ONLY with a JSON object in this EXACT format, with no markdown or text:\n"
         f'{{"ai_prediction": "SMALL" or "BIG", "ai_confidence": 0.55 to 0.95, "ai_reason": "concise 1-sentence reasoning"}}'
     )
