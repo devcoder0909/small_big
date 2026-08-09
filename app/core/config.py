@@ -44,6 +44,11 @@ class Settings(BaseSettings):
     # API Security
     api_key: str = Field(default="dev-api-key-change-me", alias="API_KEY")
 
+    # AI API Keys for Pattern Rotation
+    groq_api_key: str = Field(default="", alias="GROQ_API_KEY")
+    openrouter_api_key: str = Field(default="", alias="OPENROUTER_API_KEY")
+    gemini_api_key: str = Field(default="", alias="GEMINI_API_KEY")
+
     # CORS
     cors_origins: str = Field(default="*", alias="CORS_ORIGINS")
 

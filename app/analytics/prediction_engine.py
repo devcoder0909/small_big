@@ -502,6 +502,25 @@ async def generate_prediction(
         "volatility_regime": _analyze_volatility_regime_indicator(sizes),
     }
 
+    # Fetch AI Pattern Reasoning via Key Rotation (Groq, OpenRouter, Gemini)
+    ai_reasoning = None
+    try:
+        from app.analytics.ai_rotator import fetch_ai_prediction
+        ai_res = await fetch_ai_prediction(
+            sizes, {"entropy": shannon_entropy, "z_score": z_score}
+        )
+        if ai_res and ai_res.get("ai_prediction"):
+            ai_reasoning = ai_res
+            indicators["ai_pattern_reasoning"] = {
+                "prediction": ai_res["ai_prediction"],
+                "confidence": ai_res["ai_confidence"],
+                "reason": ai_res["ai_reason"],
+                "provider": ai_res.get("provider"),
+                "model": ai_res.get("model"),
+            }
+    except Exception as ai_err:
+        logger.warning("ai_rotator_integration_warning", error=str(ai_err))
+
     # Adaptive Dynamic Weighting based on Shannon Entropy
     weights = dict(DEFAULT_WEIGHTS)
     if shannon_entropy < 0.90:
