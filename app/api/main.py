@@ -22,6 +22,18 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         from app.core.logging import get_logger
         get_logger(__name__).warning("db_schema_init_warning", error=str(e))
+
+    # Auto-seed initial historical records on startup
+    try:
+        from app.services.recovery_service import recover_missing_records
+        from app.core.database import async_session_factory
+        async with async_session_factory() as session:
+            async with session.begin():
+                await recover_missing_records(session)
+    except Exception as e:
+        from app.core.logging import get_logger
+        get_logger(__name__).warning("auto_seed_history_warning", error=str(e))
+
     yield
 
 
