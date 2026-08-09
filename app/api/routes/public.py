@@ -56,13 +56,13 @@ HTML_PAGE = """<!DOCTYPE html>
   <h1>WinGo Predictor Engine</h1>
 
   <div class="box" style="text-align:center">
-    <div class="lbl" id="timer-label">PERIOD CLOSES IN</div>
+    <div class="lbl">NEXT PREDICTION UNLOCKS IN</div>
     <div class="timer-val" id="timer-text">00:30</div>
-    <div class="sub" id="target-issue">Period #---</div>
+    <div class="sub" id="target-issue">Next Prediction for Period #---</div>
   </div>
 
   <div class="box" style="text-align:center">
-    <div class="lbl" id="pred-label">PREDICTION FOR PERIOD #---</div>
+    <div class="lbl" id="pred-label">CURRENT PREDICTION (PERIOD #---)</div>
     <div class="pred-val wait" id="pred-text">---</div>
     <div class="conf-txt" id="conf-text">Loading prediction engine...</div>
   </div>
@@ -98,6 +98,7 @@ HTML_PAGE = """<!DOCTYPE html>
 <script>
 var timeOffsetMs = 0;
 var lastRemSec = -1;
+var currentNextIssueId = "";
 
 function updateTimer() {
   var serverNowMs = Date.now() + timeOffsetMs;
@@ -105,6 +106,10 @@ function updateTimer() {
   var remSec = 30 - (nowSec % 30);
 
   document.getElementById('timer-text').textContent = '00:' + String(remSec).padStart(2, '0');
+
+  if (currentNextIssueId) {
+    document.getElementById('target-issue').textContent = 'Next Prediction for Period #' + currentNextIssueId + ' in ' + remSec + 's';
+  }
 
   // Trigger instant refetch on period rollover and 3s after period rollover
   if (lastRemSec !== -1 && remSec > lastRemSec) {
@@ -125,12 +130,17 @@ async function updateData() {
     }
 
     if (data && data.prediction) {
-      var periodId = (data.upcoming_issue_id || '').slice(-8);
+      var rawIssue = data.upcoming_issue_id || '';
+      var currPeriodId = rawIssue.slice(-8);
+      
+      try {
+        var nextNum = BigInt(rawIssue) + 1n;
+        currentNextIssueId = String(nextNum).slice(-8);
+      } catch(e) {
+        currentNextIssueId = "---";
+      }
 
-      document.getElementById('timer-label').textContent = 'PERIOD #' + periodId + ' CLOSES IN';
-      document.getElementById('target-issue').textContent = 'Next period prediction updates at 00:00';
-
-      document.getElementById('pred-label').textContent = 'PREDICTION FOR PERIOD #' + periodId;
+      document.getElementById('pred-label').textContent = 'CURRENT PREDICTION (PERIOD #' + currPeriodId + ')';
 
       var predEl = document.getElementById('pred-text');
       predEl.textContent = data.prediction;
