@@ -1,7 +1,7 @@
 """
 AI API Key Rotator & Pattern Reasoning Service.
 
-Rotates through free-tier providers (Groq, OpenRouter, Gemini)
+Rotates through multi-key free-tier providers (Groq, OpenRouter, Gemini)
 to perform non-blocking LLM pattern analysis and boost prediction confidence.
 """
 
@@ -19,49 +19,67 @@ logger = get_logger(__name__)
 _current_provider_index = 0
 _ai_cache: dict | None = None
 _ai_cache_time: float = 0
-CACHE_TTL = 10.0  # Cache AI predictions for 10 seconds to respect free-tier quotas
+CACHE_TTL = 8.0  # Cache AI predictions for 8 seconds to respect free-tier quotas
 
 
 def _get_provider_pool() -> list[dict]:
-    """Get active provider pool loaded from environment settings."""
+    """Get active multi-key provider pool loaded from environment settings."""
     settings = get_settings()
 
-    groq_key = settings.groq_api_key or os.environ.get("GROQ_API_KEY", "")
-    openrouter_key = settings.openrouter_api_key or os.environ.get("OPENROUTER_API_KEY", "")
-    gemini_key = settings.gemini_api_key or os.environ.get("GEMINI_API_KEY", "")
+    groq_keys = [
+        settings.groq_api_key or os.environ.get("GROQ_API_KEY", ""),
+        settings.groq_api_key_2 or os.environ.get("GROQ_API_KEY_2", ""),
+    ]
+    openrouter_keys = [
+        settings.openrouter_api_key or os.environ.get("OPENROUTER_API_KEY", ""),
+        settings.openrouter_api_key_2 or os.environ.get("OPENROUTER_API_KEY_2", ""),
+        settings.openrouter_api_key_3 or os.environ.get("OPENROUTER_API_KEY_3", ""),
+    ]
+    gemini_keys = [
+        settings.gemini_api_key or os.environ.get("GEMINI_API_KEY", ""),
+    ]
 
     pool = []
-    if groq_key:
-        pool.append({
-            "name": "groq",
-            "url": "https://api.groq.com/openai/v1/chat/completions",
-            "key": groq_key,
-            "model": "llama-3.1-8b-instant",
-            "type": "openai_compat",
-        })
-    if openrouter_key:
-        pool.append({
-            "name": "openrouter",
-            "url": "https://openrouter.ai/api/v1/chat/completions",
-            "key": openrouter_key,
-            "model": "openai/gpt-4o-mini",
-            "type": "openai_compat",
-        })
-    if gemini_key:
-        pool.append({
-            "name": "gemini",
-            "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
-            "key": gemini_key,
-            "model": "gemini-2.0-flash",
-            "type": "gemini",
-        })
+
+    # Groq keys
+    for i, k in enumerate(groq_keys):
+        if k:
+            pool.append({
+                "name": f"groq_{i+1}",
+                "url": "https://api.groq.com/openai/v1/chat/completions",
+                "key": k,
+                "model": "llama-3.1-8b-instant",
+                "type": "openai_compat",
+            })
+
+    # OpenRouter keys
+    for i, k in enumerate(openrouter_keys):
+        if k:
+            pool.append({
+                "name": f"openrouter_{i+1}",
+                "url": "https://openrouter.ai/api/v1/chat/completions",
+                "key": k,
+                "model": "openai/gpt-4o-mini",
+                "type": "openai_compat",
+            })
+
+    # Gemini keys
+    for i, k in enumerate(gemini_keys):
+        if k:
+            pool.append({
+                "name": f"gemini_{i+1}",
+                "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+                "key": k,
+                "model": "gemini-2.0-flash",
+                "type": "gemini",
+            })
 
     return pool
 
 
 async def fetch_ai_prediction(sizes: list[str], stat_summary: dict) -> dict | None:
     """
-    Fetch an AI pattern reasoning signal using key rotation.
+    Fetch an AI pattern reasoning signal using multi-key rotation.
 
     Args:
         sizes: Recent draw sizes (e.g. ['SMALL', 'BIG', ...]).
