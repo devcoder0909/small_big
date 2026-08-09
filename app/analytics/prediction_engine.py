@@ -440,13 +440,41 @@ def _analyze_volatility_regime_indicator(sizes: list[str]) -> dict:
     return {"prediction": None, "confidence": 0, "reason": "stable_entropy_regime"}
 
 
+def _analyze_chi_square_goodness_of_fit_indicator(sizes: list[str]) -> dict:
+    """Pearson's Chi-Square Goodness-of-Fit Statistically Significant Skew Filter."""
+    if len(sizes) < 20:
+        return {"prediction": None, "confidence": 0, "reason": "insufficient_data"}
+
+    window = sizes[:40]
+    n = len(window)
+    o_small = window.count("SMALL")
+    o_big = window.count("BIG")
+    expected = n / 2.0
+
+    # Pearson Chi-Square statistic = sum((O - E)^2 / E)
+    chi_sq = ((o_small - expected) ** 2 + (o_big - expected) ** 2) / expected
+
+    # Critical value at df=1, p=0.05 is 3.841
+    if chi_sq >= 3.841:
+        # Significant skew -> Mean reversion signal
+        target = "BIG" if o_small > o_big else "SMALL"
+        conf = min(0.85, 0.55 + (chi_sq - 3.841) * 0.05)
+        return {
+            "prediction": target,
+            "confidence": round(conf, 3),
+            "reason": f"chi_square_significant_skew_chisq_{chi_sq:.2f}",
+        }
+
+    return {"prediction": None, "confidence": 0, "reason": "chi_square_uniform_distribution"}
+
+
 async def generate_prediction(
     session: AsyncSession, window: int = 500
 ) -> dict:
     """
-    Generate an advanced 8-Indicator Ensemble statistical prediction for the upcoming draw.
+    Generate an advanced 9-Indicator Ensemble statistical prediction for the upcoming draw.
 
-    Combines 8 independent mathematical, structural, and Bayesian indicators:
+    Combines 9 independent mathematical, structural, Bayesian, and Chi-Square indicators:
     1. Empirical Streak Reversal & Non-Linear Hazard Rate
     2. Multi-Order Markov Chain State Transitions
     3. Z-Score Statistical Frequency Rebalance
@@ -455,6 +483,7 @@ async def generate_prediction(
     6. Harmonic Periodicity & Micro-Cycle Detection
     7. Bayesian Model Averaging (Dirichlet-Multinomial Prior)
     8. Shannon Entropy Volatility & Regime Shift Filter
+    9. Pearson's Chi-Square Goodness-of-Fit Skew Detection
 
     Args:
         session: Active database session.
@@ -490,7 +519,7 @@ async def generate_prediction(
     shannon_entropy = _calculate_shannon_entropy(sizes[:50])
     z_score, p_small = _calculate_z_score(sizes)
 
-    # Run all 8 indicators
+    # Run all 9 indicators
     indicators = {
         "streak_reversal": _analyze_streak_indicator(sizes),
         "markov_transition": _analyze_markov_transition_indicator(sizes),
@@ -500,6 +529,7 @@ async def generate_prediction(
         "harmonic_periodicity": _analyze_harmonic_periodicity_indicator(sizes),
         "bayesian_posterior": _analyze_bayesian_posterior_indicator(sizes),
         "volatility_regime": _analyze_volatility_regime_indicator(sizes),
+        "chi_square_skew": _analyze_chi_square_goodness_of_fit_indicator(sizes),
     }
 
     # Fetch AI Pattern Reasoning via Key Rotation (Groq, OpenRouter, Gemini)

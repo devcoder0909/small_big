@@ -14,6 +14,7 @@ from app.analytics.prediction_engine import (
     _analyze_harmonic_periodicity_indicator,
     _analyze_bayesian_posterior_indicator,
     _analyze_volatility_regime_indicator,
+    _analyze_chi_square_goodness_of_fit_indicator,
 )
 from app.models.game_result import GameResult
 
@@ -96,6 +97,14 @@ def test_volatility_regime_indicator():
     sizes = ["SMALL"] * 15 + ["BIG", "SMALL"] * 15
     res = _analyze_volatility_regime_indicator(sizes)
     assert res["prediction"] is not None
+
+
+def test_chi_square_goodness_of_fit_indicator():
+    """Test Pearson Chi-Square goodness-of-fit indicator on skewed dataset."""
+    sizes = ["SMALL"] * 35 + ["BIG"] * 5
+    res = _analyze_chi_square_goodness_of_fit_indicator(sizes)
+    assert res["prediction"] == "BIG"
+    assert res["confidence"] > 0.50
 
 
 @pytest.mark.asyncio
