@@ -102,11 +102,11 @@ async def fetch_ai_prediction(sizes: list[str], stat_summary: dict) -> dict | No
     if not providers:
         return None
 
-    recent_sequence = ", ".join(sizes[:40])
+    chronological_sequence = ", ".join(list(reversed(sizes[:40])))
     prompt = (
         f"You are a world-class mathematical pattern analyst specializing in binary sequence forecasting.\n"
         f"Your job: analyze the sequence and statistical indicators below, then predict the NEXT outcome.\n\n"
-        f"RECENT 40 DRAWS (newest first): [{recent_sequence}]\n\n"
+        f"RECENT 40 DRAWS (chronological order: oldest -> newest): [{chronological_sequence}]\n\n"
         f"LOCAL 10-INDICATOR STATISTICAL ENGINE OUTPUT:\n{json.dumps(stat_summary, indent=2)}\n\n"
         f"ANALYSIS REQUIRED:\n"
         f"1. Check streak exhaustion patterns\n"

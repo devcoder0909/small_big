@@ -48,6 +48,7 @@ DEFAULT_WEIGHTS = {
     "color_parity_momentum": 0.07,
     "monte_carlo_simulator": 0.07,
     "kalman_filter_momentum": 0.06,
+    "ai_pattern_reasoning": 0.16,
 }
 
 
@@ -781,8 +782,8 @@ def _calculate_adaptive_indicator_weights(sizes: list[str], base_weights: dict, 
 
     adaptive = {}
     for name, base_w in base_weights.items():
-        votes = indicator_votes[name]
-        wins = indicator_wins[name]
+        votes = indicator_votes.get(name, 0)
+        wins = indicator_wins.get(name, 0)
 
         if votes >= 3:
             win_rate = wins / votes

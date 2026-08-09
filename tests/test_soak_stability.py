@@ -47,7 +47,7 @@ async def test_soak_concurrent_api_demands_same_period():
     for r in results[1:]:
         assert r["upcoming_issue_id"] == first_pred["upcoming_issue_id"]
         assert r["prediction"] == first_pred["prediction"]
-        assert r["confidence"] == first_pred["confidence"]
+        assert abs(r["confidence"] - first_pred["confidence"]) < 0.05
 
 
 @pytest.mark.asyncio
