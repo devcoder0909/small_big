@@ -57,6 +57,7 @@ HTML_PAGE = """<!DOCTYPE html>
 
   <div class="box" style="text-align:center">
     <div class="lbl" id="pred-label">CURRENT PREDICTION (PERIOD #---)</div>
+    <div class="sub" id="sub-timer" style="font-size:10px;color:#00d68f;margin-bottom:6px">⚡ Live • Auto-Updates in --s</div>
     <div class="pred-val wait" id="pred-text">---</div>
     <div class="conf-txt" id="conf-text">Loading prediction engine...</div>
   </div>
@@ -98,6 +99,11 @@ function checkRollover() {
   var serverNowMs = Date.now() + timeOffsetMs;
   var nowSec = Math.floor(serverNowMs / 1000);
   var remSec = 30 - (nowSec % 30);
+
+  var timerEl = document.getElementById('sub-timer');
+  if (timerEl) {
+    timerEl.textContent = '⚡ Live • Auto-Updates in ' + remSec + 's';
+  }
 
   // Trigger instant refetch on period rollover and sub-second retries
   if (lastRemSec !== -1 && remSec > lastRemSec) {
