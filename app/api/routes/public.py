@@ -93,7 +93,7 @@ HTML_PAGE = """<!DOCTYPE html>
     </table>
   </div>
 
-  <div class="foot">Statistical Analysis Engine. Real Scraped Data Only.</div>
+  <div class="foot">100% Real Scraped Data. Auto-Analyzed Within 5s of Draw.</div>
 
 <script>
 var timeOffsetMs = 0;
@@ -106,9 +106,11 @@ function updateTimer() {
 
   document.getElementById('timer-text').textContent = '00:' + String(remSec).padStart(2, '0');
 
-  // Trigger instant data refetch on period rollover
+  // Trigger instant refetch on period rollover and 3s after period rollover
   if (lastRemSec !== -1 && remSec > lastRemSec) {
     updateData();
+    setTimeout(updateData, 2500);
+    setTimeout(updateData, 5000);
   }
   lastRemSec = remSec;
 }
