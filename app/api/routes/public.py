@@ -198,7 +198,7 @@ async function updateData() {
 
         return '<tr>' +
           '<td>#' + item.issue_id.slice(-8) + '</td>' +
-          '<td>' + item.result + ' <span class="tag ' + actClass + '">' + item.size + '</span></td>' +
+          '<td><span class="tag ' + actClass + '">' + item.size + '</span></td>' +
           '<td><span class="tag ' + predClass + '">' + item.predicted_size + '</span></td>' +
           '<td class="' + resClass + '">' + resText + '</td>' +
         '</tr>';
