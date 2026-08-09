@@ -1,5 +1,6 @@
 """Public routes — Superfast zero-animation prediction UI focusing strictly on accurate data and timers."""
 
+import time
 from fastapi import APIRouter, Depends
 from fastapi.responses import HTMLResponse
 from sqlalchemy import select, desc
@@ -95,16 +96,31 @@ HTML_PAGE = """<!DOCTYPE html>
   <div class="foot">Statistical Analysis Engine. Real Scraped Data Only.</div>
 
 <script>
+var timeOffsetMs = 0;
+var lastRemSec = -1;
+
 function updateTimer() {
-  var nowSec = Math.floor(Date.now() / 1000);
+  var serverNowMs = Date.now() + timeOffsetMs;
+  var nowSec = Math.floor(serverNowMs / 1000);
   var remSec = 30 - (nowSec % 30);
+
   document.getElementById('timer-text').textContent = '00:' + String(remSec).padStart(2, '0');
+
+  // Trigger instant data refetch on period rollover
+  if (lastRemSec !== -1 && remSec > lastRemSec) {
+    updateData();
+  }
+  lastRemSec = remSec;
 }
 
 async function updateData() {
   try {
     var res = await fetch('/api/v1/public/prediction');
     var data = await res.json();
+
+    if (data && data.server_time_ms) {
+      timeOffsetMs = data.server_time_ms - Date.now();
+    }
 
     if (data && data.prediction) {
       var predEl = document.getElementById('pred-text');
@@ -157,7 +173,7 @@ async function updateData() {
 
 updateTimer();
 updateData();
-setInterval(updateTimer, 500);
+setInterval(updateTimer, 200);
 setInterval(updateData, 1000);
 </script>
 </body>
@@ -175,6 +191,7 @@ async def serve_minimal_ui():
 async def get_public_prediction(session: AsyncSession = Depends(get_session)):
     """Public unauthenticated prediction readout with recent accuracy verification."""
     prediction = await get_prediction(session)
+    prediction["server_time_ms"] = int(time.time() * 1000)
 
     if prediction.get("status") == "INSUFFICIENT_DATA":
         import asyncio
