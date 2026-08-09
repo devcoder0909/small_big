@@ -43,7 +43,6 @@ async def test_full_prediction_lifecycle_immutability():
 
     assert prediction_data["prediction"] == "SMALL"
     assert prediction_data["upcoming_issue_id"] == "202608100050"
-    assert prediction_data["expires_at_ms"] - prediction_data["created_at_ms"] == 15000
 
 
 @pytest.mark.asyncio

@@ -25,7 +25,6 @@ HTML_PAGE = """<!DOCTYPE html>
     h1{font-size:15px;text-align:center;color:#aaa;margin-bottom:10px;text-transform:uppercase;letter-spacing:1px}
     .box{background:#14141c;border:1px solid #222;border-radius:6px;padding:12px;margin-bottom:10px}
     .lbl{font-size:11px;color:#777;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px}
-    .timer-val{font-size:32px;font-weight:700;color:#f5c518;font-family:monospace}
     .sub{font-size:11px;color:#666;margin-top:2px}
     .pred-val{font-size:44px;font-weight:900;margin:4px 0;line-height:1}
     .pred-val.big{color:#ff4d6a}
@@ -59,7 +58,6 @@ HTML_PAGE = """<!DOCTYPE html>
     <div class="lbl" id="pred-label" style="font-size:13px;font-weight:700;color:#aaa;margin-bottom:6px">PERIOD #---</div>
     <div class="pred-val wait" id="pred-text">---</div>
     <div class="conf-txt" id="conf-text">Confidence: <b>--%</b> — <span class="badge low">LOW</span></div>
-    <div class="sub" id="sub-timer" style="font-size:11px;color:#00d68f;margin-top:8px;font-weight:600">Prediction active • Next prediction in: --s</div>
   </div>
 
   <div class="grid">
@@ -91,50 +89,15 @@ HTML_PAGE = """<!DOCTYPE html>
   <div class="foot">100% Real Scraped Data. Auto-Analyzed Within 5s of Draw.</div>
 
 <script>
-var timeOffsetMs = 0;
 var lastRenderedIssueId = "";
 var currentPredictionData = null;
-var isRefetching = false;
-
-function updatePredictionCountdown() {
-  var serverNowMs = Date.now() + timeOffsetMs;
-  var timerEl = document.getElementById('sub-timer');
-
-  if (currentPredictionData && currentPredictionData.expires_at_ms) {
-    var remainingMs = Math.max(0, currentPredictionData.expires_at_ms - serverNowMs);
-    var remainingSec = Math.floor(remainingMs / 1000);
-
-    if (timerEl) {
-      if (remainingMs > 0) {
-        timerEl.textContent = 'Prediction active • Next prediction in: ' + remainingSec + 's';
-        timerEl.style.color = '#00d68f';
-      } else {
-        timerEl.textContent = 'Prediction updating • Next prediction in: 0s';
-        timerEl.style.color = '#ffd700';
-
-        if (!isRefetching) {
-          isRefetching = true;
-          updateData().then(function() { isRefetching = false; });
-        }
-      }
-    }
-  } else if (timerEl) {
-    timerEl.textContent = 'Prediction active • Next prediction in: --s';
-    timerEl.style.color = '#00d68f';
-  }
-}
 
 async function updateData() {
   try {
     var res = await fetch('/api/v1/public/prediction');
     var data = await res.json();
 
-    if (data && data.server_time_ms) {
-      timeOffsetMs = data.server_time_ms - Date.now();
-    }
-
     if (data && data.prediction && data.upcoming_issue_id) {
-      // Out-of-order response protection: ignore older period responses
       if (currentPredictionData && currentPredictionData.upcoming_issue_id) {
         var newId = parseInt(data.upcoming_issue_id, 10);
         var currId = parseInt(currentPredictionData.upcoming_issue_id, 10);
@@ -201,9 +164,7 @@ async function updateData() {
   } catch (e) {}
 }
 
-updatePredictionCountdown();
 updateData();
-setInterval(updatePredictionCountdown, 100);
 setInterval(updateData, 2000);
 </script>
 </body>

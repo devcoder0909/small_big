@@ -1,10 +1,10 @@
 """
-Prediction Timer & Synchronization Integrity Test Suite.
+Prediction Period Synchronization Test Suite.
 
 Verifies:
-1. Every prediction receives an authoritative 15-second display lifetime (expires_at_ms - created_at_ms == 15000ms).
-2. Repeated calls/polling for the SAME period ID return identical expires_at_ms (no resets or timer jumps).
-3. Clock offset calculations & stale response protection.
+1. Every prediction is accurately generated for the upcoming_issue_id.
+2. Repeated calls/polling for the SAME period ID return consistent predictions and issue IDs without duplicate generation.
+3. Period transition automatically updates prediction for the next period.
 """
 
 import pytest
@@ -22,8 +22,8 @@ class MockRow:
 
 
 @pytest.mark.asyncio
-async def test_exact_15_second_prediction_lifetime():
-    """Verify generated prediction has exactly 15000ms duration."""
+async def test_prediction_period_synchronization():
+    """Verify generated prediction has valid upcoming_issue_id and ACTIVE status."""
     rows = [
         MockRow("SMALL", str(1000 + i), (i % 10))
         for i in range(50, 0, -1)
@@ -37,13 +37,13 @@ async def test_exact_15_second_prediction_lifetime():
     pred = await generate_prediction(mock_session)
 
     assert pred["status"] == "ACTIVE"
-    assert pred["display_duration_sec"] == 15
-    assert pred["expires_at_ms"] - pred["created_at_ms"] == 15000
+    assert pred["upcoming_issue_id"] == "1051"
+    assert pred["prediction"] in ("SMALL", "BIG")
 
 
 @pytest.mark.asyncio
-async def test_repeated_polling_does_not_reset_expiration():
-    """Verify that calling generate_prediction multiple times for same period returns identical expires_at_ms."""
+async def test_repeated_polling_returns_consistent_prediction():
+    """Verify that calling generate_prediction multiple times for same period returns consistent data."""
     rows = [
         MockRow("SMALL", str(1000 + i), (i % 10))
         for i in range(50, 0, -1)
@@ -56,12 +56,9 @@ async def test_repeated_polling_does_not_reset_expiration():
 
     # Call 1
     pred1 = await generate_prediction(mock_session)
-    # Call 2 (simulating fast API polling)
+    # Call 2
     pred2 = await generate_prediction(mock_session)
-    # Call 3
-    pred3 = await generate_prediction(mock_session)
 
-    assert pred1["upcoming_issue_id"] == pred2["upcoming_issue_id"] == pred3["upcoming_issue_id"]
-    # Timestamps MUST be identical (no reset to 15s)
-    assert pred1["expires_at_ms"] == pred2["expires_at_ms"] == pred3["expires_at_ms"]
-    assert pred1["created_at_ms"] == pred2["created_at_ms"] == pred3["created_at_ms"]
+    assert pred1["upcoming_issue_id"] == pred2["upcoming_issue_id"]
+    assert pred1["prediction"] == pred2["prediction"]
+    assert pred1["confidence"] == pred2["confidence"]
