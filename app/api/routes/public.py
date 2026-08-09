@@ -57,6 +57,10 @@ HTML_PAGE = """<!DOCTYPE html>
           document.getElementById('res').textContent = d.prediction;
           document.getElementById('issue').textContent = '#' + (d.upcoming_issue_id || '');
           document.getElementById('conf').textContent = (d.confidence * 100).toFixed(1) + '%';
+        } else if (d && d.status === 'INSUFFICIENT_DATA') {
+          document.getElementById('res').textContent = 'WAITING';
+          document.getElementById('issue').textContent = '#INITIALIZING';
+          document.getElementById('conf').textContent = 'Collecting History Data...';
         }
       } catch (e) {}
     }
