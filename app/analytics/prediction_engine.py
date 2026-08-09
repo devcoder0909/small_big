@@ -1107,6 +1107,10 @@ async def generate_prediction(
     expires_at_ms = now_ms + (display_duration_sec * 1000)
 
     if upcoming_issue_id:
+        if len(_PREDICTION_TIMESTAMP_CACHE) > 100:
+            for k in list(_PREDICTION_TIMESTAMP_CACHE.keys())[:-50]:
+                _PREDICTION_TIMESTAMP_CACHE.pop(k, None)
+
         if upcoming_issue_id in _PREDICTION_TIMESTAMP_CACHE:
             now_ms, expires_at_ms = _PREDICTION_TIMESTAMP_CACHE[upcoming_issue_id]
         else:
@@ -1195,6 +1199,7 @@ async def persist_original_prediction(session: AsyncSession, prediction_res: dic
                 created_at=datetime.now(timezone.utc),
             ).on_conflict_do_nothing(index_elements=["issue_id"])
             await session.execute(stmt)
+            await session.commit()
         else:
             exists_stmt = select(EnginePrediction.id).where(EnginePrediction.issue_id == upcoming_issue)
             res = await session.execute(exists_stmt)
@@ -1211,7 +1216,12 @@ async def persist_original_prediction(session: AsyncSession, prediction_res: dic
                     created_at=datetime.now(timezone.utc),
                 )
                 session.add(ep)
+                await session.commit()
     except Exception as err:
+        try:
+            await session.rollback()
+        except Exception:
+            pass
         logger.warning("persist_original_prediction_failed", error=str(err))
 
 
