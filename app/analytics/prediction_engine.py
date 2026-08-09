@@ -660,3 +660,54 @@ def _get_current_streak(sizes: list[str]) -> dict:
         else:
             break
     return {"size": current, "length": length}
+
+
+def evaluate_recent_accuracy(rows: list) -> list[dict]:
+    """
+    Evaluate accuracy of statistical ensemble predictions on recent draws.
+
+    Args:
+        rows: GameResult rows ordered by issue_id desc.
+
+    Returns:
+        List of dicts with issue_id, result_number, calculated_size, prediction, and is_win.
+    """
+    if len(rows) < 10:
+        return []
+
+    results = []
+    for i in range(min(5, len(rows) - 5)):
+        current_row = rows[i]
+        prior_sizes = [r.calculated_size for r in rows[i + 1 :]]
+        if len(prior_sizes) < 5:
+            continue
+
+        m_trans = _analyze_markov_transition_indicator(prior_sizes)
+        st_freq = _analyze_statistical_frequency_indicator(prior_sizes)
+        ngram_p = _analyze_multi_ngram_pattern_indicator(prior_sizes)
+
+        votes = [
+            m_trans.get("prediction"),
+            st_freq.get("prediction"),
+            ngram_p.get("prediction"),
+        ]
+        valid_votes = [v for v in votes if v in ("SMALL", "BIG")]
+        if valid_votes:
+            small_c = valid_votes.count("SMALL")
+            big_c = valid_votes.count("BIG")
+            pred = "SMALL" if small_c >= big_c else "BIG"
+        else:
+            pred = prior_sizes[0]
+
+        is_win = pred == current_row.calculated_size
+        results.append({
+            "issue_id": current_row.issue_id,
+            "result": current_row.result_number,
+            "size": current_row.calculated_size,
+            "color": current_row.source_color,
+            "predicted_size": pred,
+            "is_win": is_win,
+            "prediction_status": "WIN" if is_win else "LOSS",
+        })
+
+    return results
