@@ -823,16 +823,20 @@ def _score_indicators(indicators: dict, weights: dict) -> tuple:
     # Cluster definitions for collinearity dampening
     freq_cluster = ["stat_frequency", "bayesian_posterior", "chi_square_skew"]
     pattern_cluster = ["sequence_hash_miner", "pattern_match"]
+    momentum_cluster = ["ema_momentum", "digit_numeric_momentum", "color_parity_momentum", "kalman_filter_momentum"]
 
     active_freq_preds = [indicators.get(k, {}).get("prediction") for k in freq_cluster if indicators.get(k, {}).get("prediction")]
     active_pattern_preds = [indicators.get(k, {}).get("prediction") for k in pattern_cluster if indicators.get(k, {}).get("prediction")]
+    active_momentum_preds = [indicators.get(k, {}).get("prediction") for k in momentum_cluster if indicators.get(k, {}).get("prediction")]
 
     # Count agreement inside clusters
     freq_cluster_collinear = len(active_freq_preds) > 1 and len(set(active_freq_preds)) == 1
     pattern_cluster_collinear = len(active_pattern_preds) > 1 and len(set(active_pattern_preds)) == 1
+    momentum_cluster_collinear = len(active_momentum_preds) > 1 and len(set(active_momentum_preds)) == 1
 
     seen_freq = False
     seen_pattern = False
+    seen_momentum = False
 
     for name, indicator in indicators.items():
         w = weights.get(name, 0.08)
@@ -850,6 +854,10 @@ def _score_indicators(indicators: dict, weights: dict) -> tuple:
                 if seen_pattern and pattern_cluster_collinear:
                     effective_w *= 0.65  # 35% dampening on collinear pattern signals
                 seen_pattern = True
+            elif name in momentum_cluster:
+                if seen_momentum and momentum_cluster_collinear:
+                    effective_w *= 0.65  # 35% dampening on collinear momentum signals
+                seen_momentum = True
 
             # Squared confidence amplification: high-confidence indicators dominate
             amplified_conf = conf * conf

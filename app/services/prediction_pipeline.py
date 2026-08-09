@@ -109,7 +109,9 @@ class PredictionPipeline:
 
             try:
                 async with async_session_factory() as session:
+                    t_analysis_start = time.monotonic()
                     prediction = await generate_prediction(session, 500)
+                    t_analysis_end = time.monotonic()
 
                     if not prediction or prediction.get("status") == "INSUFFICIENT_DATA":
                         self._current_prediction = prediction
@@ -123,6 +125,7 @@ class PredictionPipeline:
                     prediction["status"] = "READY"
 
                     # Persist the immutable prediction record
+                    t_persist_start = time.monotonic()
                     try:
                         await persist_original_prediction(session, prediction)
                     except Exception as persist_err:
@@ -131,6 +134,14 @@ class PredictionPipeline:
                             error=str(persist_err),
                             next_period=next_period,
                         )
+                    t_persist_end = time.monotonic()
+
+                    elapsed_ms = int((time.monotonic() - t_start) * 1000)
+                    prediction["latency_breakdown_ms"] = {
+                        "analysis_ms": int((t_analysis_end - t_analysis_start) * 1000),
+                        "persist_ms": int((t_persist_end - t_persist_start) * 1000),
+                        "total_cycle_ms": elapsed_ms,
+                    }
 
                     # Lock the prediction
                     self._current_prediction = prediction
