@@ -1,7 +1,7 @@
 """Game result model — core historical data table."""
 
 from datetime import datetime, timezone
-from sqlalchemy import BigInteger, Boolean, Integer, Text, DateTime, Index, ForeignKey
+from sqlalchemy import BigInteger, Boolean, Integer, Text, DateTime, Index, ForeignKey, desc
 from sqlalchemy.orm import Mapped, mapped_column
 from app.models.base import Base, BIGINT_PK
 
@@ -17,8 +17,10 @@ class GameResult(Base):
     __tablename__ = "game_results"
     __table_args__ = (
         Index("idx_game_results_issue_id", "issue_id", unique=True),
+        Index("idx_game_results_issue_id_desc", desc("issue_id")),
         Index("idx_game_results_first_observed_at", "first_observed_at"),
         Index("idx_game_results_source_created_at", "source_created_at"),
+        Index("idx_game_results_created_at", "created_at"),
         Index("idx_game_results_size", "calculated_size"),
         Index("idx_game_results_number", "result_number"),
     )

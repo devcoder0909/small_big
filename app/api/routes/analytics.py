@@ -115,3 +115,17 @@ async def get_v3_metrics():
         "champion_selector": champion_selector.get_metrics_summary(),
         "disclaimer": "Internal OOS performance & timing telemetry metrics for system observability.",
     }
+
+
+@router.get("/production-truth")
+async def get_production_truth(session: AsyncSession = Depends(get_session)):
+    """
+    Production Truth Verification Endpoint.
+
+    Exposes real database metrics, 6 GB storage alarm status, scraper lifecycle metrics,
+    accuracy confidence intervals, calibration buckets, baseline comparisons, and verdict classification.
+    """
+    from app.services.production_truth_service import generate_production_truth_report
+
+    return await generate_production_truth_report(session)
+

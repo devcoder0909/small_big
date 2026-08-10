@@ -12,7 +12,16 @@
         "SOURCE_URL": "https://draw.ar-lottery01.com/WinGo/WinGo_30S/GetHistoryIssuePage.json",
         "POLL_INTERVAL_SECONDS": "5",
         "LOG_LEVEL": "INFO",
-        "LOG_FORMAT": "json"
+        "LOG_FORMAT": "json",
+        "NVIDIA_BASE_URL": "https://integrate.api.nvidia.com/v1",
+        "NVIDIA_MODEL": "nvidia/nemotron-3-ultra-550b-a55b",
+        "OPENROUTER_BASE_URL": "https://openrouter.ai/api/v1",
+        "OPENROUTER_MODEL": "meta-llama/llama-3.1-70b-instruct",
+        "AI_PROVIDERS": "nvidia,openrouter,groq,gemini",
+        "AI_MAX_REQUESTS_PER_CYCLE": "1",
+        "AI_TIMEOUT_SECONDS": "3.0",
+        "AI_MAX_RETRIES": "1",
+        "AI_PROVIDER_COOLDOWN_SECONDS": "60.0"
       }
     },
     {
@@ -30,7 +39,16 @@
       "environment": {
         "APP_ENV": "production",
         "LOG_LEVEL": "INFO",
-        "LOG_FORMAT": "json"
+        "LOG_FORMAT": "json",
+        "NVIDIA_BASE_URL": "https://integrate.api.nvidia.com/v1",
+        "NVIDIA_MODEL": "nvidia/nemotron-3-ultra-550b-a55b",
+        "OPENROUTER_BASE_URL": "https://openrouter.ai/api/v1",
+        "OPENROUTER_MODEL": "meta-llama/llama-3.1-70b-instruct",
+        "AI_PROVIDERS": "nvidia,openrouter,groq,gemini",
+        "AI_MAX_REQUESTS_PER_CYCLE": "1",
+        "AI_TIMEOUT_SECONDS": "3.0",
+        "AI_MAX_RETRIES": "1",
+        "AI_PROVIDER_COOLDOWN_SECONDS": "60.0"
       }
     }
   ],

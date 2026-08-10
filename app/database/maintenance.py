@@ -34,16 +34,20 @@ async def cleanup_old_raw_responses():
     return {"deleted": deleted, "cutoff": cutoff.isoformat()}
 
 
-async def prune_oldest_game_results(max_records: int = 50000):
+async def prune_oldest_game_results(max_records: int | None = None):
     """
     Ensure total game_results count never exceeds max_records.
 
-    Deletes records older than the 50,000th latest issue_id.
-    Prevents PostgreSQL disk space exhaustion on 512MB RAM plans.
+    Deletes records older than the max_records threshold.
+    Prevents PostgreSQL disk space exhaustion while preserving large prediction window depth.
     """
+    if max_records is None:
+        settings = get_settings()
+        max_records = settings.max_game_results_retention
+
     async with async_session_factory() as session:
         async with session.begin():
-            # Find the threshold issue_id for the 50,000th record
+            # Find the threshold issue_id for the max_records-th record
             query = (
                 select(GameResult.issue_id)
                 .order_by(GameResult.issue_id.desc())
@@ -83,7 +87,8 @@ async def run_maintenance():
         results["raw_cleanup"] = {"error": str(e)}
 
     try:
-        results["game_prune"] = await prune_oldest_game_results(50000)
+        settings = get_settings()
+        results["game_prune"] = await prune_oldest_game_results(settings.max_game_results_retention)
     except Exception as e:
         logger.error("maintenance_error", task="game_prune", error=str(e))
         results["game_prune"] = {"error": str(e)}

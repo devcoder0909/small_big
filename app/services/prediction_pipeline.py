@@ -117,12 +117,6 @@ class PredictionPipeline:
                 return
 
             t_analysis_start_ms = int(time.time() * 1000)
-            logger.info(
-                "pipeline_prediction_start",
-                latest_result=latest_issue_id,
-                next_period=next_period,
-            )
-
             try:
                 async with async_session_factory() as session:
                     # 1. Stale data & gap safety gate
@@ -184,7 +178,7 @@ class PredictionPipeline:
                         return
 
                     # 2. Generate prediction strictly from historical data <= latest_issue_id
-                    prediction = await generate_prediction(session, 500)
+                    prediction = await generate_prediction(session, None)
                     t_analysis_complete_ms = int(time.time() * 1000)
 
                     if not prediction or prediction.get("status") == PipelineState.INSUFFICIENT_DATA.value:

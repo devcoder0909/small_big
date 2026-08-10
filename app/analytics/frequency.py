@@ -4,7 +4,7 @@ from sqlalchemy import select, func, case, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.game_result import GameResult
 
-WINDOWS = [20, 50, 100, 500, 1000]
+WINDOWS = [20, 50, 100, 500, 1000, 2000, 5000, 10000]
 
 
 async def calculate_frequency(

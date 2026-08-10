@@ -39,7 +39,7 @@ async def test_target_period_binding_is_latest_plus_one():
     mock_exec.fetchall.return_value = rows
     mock_session.execute.return_value = mock_exec
 
-    pred = await generate_prediction(mock_session, 500)
+    pred = await generate_prediction(mock_session, 5000)
 
     latest = rows[0].issue_id
     expected_target = str(int(latest) + 1)
@@ -64,7 +64,7 @@ async def test_future_row_injection_does_not_leak_into_prediction():
     mock_exec1.fetchall.return_value = base_rows
     mock_session.execute.return_value = mock_exec1
 
-    pred_clean = await generate_prediction(mock_session, 500)
+    pred_clean = await generate_prediction(mock_session, 5000)
 
     assert pred_clean["upcoming_issue_id"] == "52250"
     assert pred_clean["status"] in ("ACTIVE", "READY")

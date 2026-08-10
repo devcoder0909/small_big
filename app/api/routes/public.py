@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session
 from app.models.game_result import GameResult
-from app.analytics.prediction_engine import evaluate_recent_accuracy
+from app.analytics.prediction_engine import get_game_history
 
 router = APIRouter(tags=["public"])
 
@@ -66,27 +66,23 @@ HTML_PAGE = """<!DOCTYPE html>
   </div>
 
   <div class="grid">
-    <div class="g-box"><div class="g-val green" id="stat-wins">-</div><div class="g-lbl">Wins / 5</div></div>
     <div class="g-box"><div class="g-val gold" id="stat-signals">-</div><div class="g-lbl">Active Signals</div></div>
-    <div class="g-box"><div class="g-val blue" id="stat-records">-</div><div class="g-lbl">Records</div></div>
+    <div class="g-box" style="grid-column: span 2"><div class="g-val blue" id="stat-records">-</div><div class="g-lbl">Records Analyzed</div></div>
   </div>
 
   <div class="box">
-    <div class="lbl" style="margin-bottom:8px;display:flex;justify-content:space-between">
-      <span>History & Accuracy</span>
-      <span id="accuracy-pct" style="color:#00d68f;font-weight:700">--%</span>
+    <div class="lbl" style="margin-bottom:8px">
+      <span>Game History</span>
     </div>
     <table>
       <thead>
         <tr>
           <th>Period</th>
-          <th>Actual</th>
-          <th>Predicted</th>
-          <th>Result</th>
+          <th style="text-align:right">Result</th>
         </tr>
       </thead>
       <tbody id="history-body">
-        <tr><td colspan="4" style="text-align:center;color:#444;padding:12px">Loading history...</td></tr>
+        <tr><td colspan="2" style="text-align:center;color:#444;padding:12px">Loading history...</td></tr>
       </tbody>
     </table>
   </div>
@@ -156,30 +152,17 @@ async function updateData() {
       document.getElementById('pred-status').innerHTML = '<span class="status-dot waiting"></span>Waiting for data';
     }
 
-    // History section
+    // Real Game History section
     if (data.recent_history && data.recent_history.length > 0) {
       var hist = data.recent_history;
-      var wins = hist.filter(function(x) { return x.is_win; }).length;
-      var total = hist.length;
-      var pct = Math.round((wins / total) * 100);
-
-      document.getElementById('stat-wins').textContent = wins + '/' + total;
-      var accEl = document.getElementById('accuracy-pct');
-      accEl.textContent = pct + '%';
-      accEl.style.color = pct >= 60 ? '#00d68f' : pct >= 40 ? '#ffd700' : '#ff4d6a';
-
       var tbody = document.getElementById('history-body');
       tbody.innerHTML = hist.map(function(item) {
-        var actClass = item.size === 'BIG' ? 'big' : 'small';
-        var predClass = item.predicted_size === 'BIG' ? 'big' : 'small';
-        var resClass = item.is_win ? 'win' : 'loss';
-        var resText = item.is_win ? '✅ WIN' : '❌ LOSS';
+        var outcome = item.result || item.actual || item.size || '---';
+        var actClass = outcome === 'BIG' ? 'big' : 'small';
 
         return '<tr>' +
-          '<td>#' + item.issue_id.slice(-8) + '</td>' +
-          '<td><span class="tag ' + actClass + '">' + item.size + '</span></td>' +
-          '<td><span class="tag ' + predClass + '">' + item.predicted_size + '</span></td>' +
-          '<td class="' + resClass + '">' + resText + '</td>' +
+          '<td>#' + String(item.issue_id || item.period || '').slice(-8) + '</td>' +
+          '<td style="text-align:right"><span class="tag ' + actClass + '">' + outcome + '</span></td>' +
         '</tr>';
       }).join('');
     }
@@ -220,16 +203,24 @@ async def get_public_prediction(session: AsyncSession = Depends(get_session)):
 
         prediction["server_time_ms"] = int(time.time() * 1000)
 
-        # Attach recent accuracy history from immutable audit trail
+        # Attach real GameResult history (authoritative observed outcomes only)
         try:
             rows_query = await session.execute(
                 select(GameResult).order_by(desc(GameResult.issue_id)).limit(20)
             )
             rows = rows_query.scalars().all()
-            prediction["recent_history"] = await evaluate_recent_accuracy(session, rows)
+            prediction["recent_history"] = [
+                {
+                    "period": r.issue_id,
+                    "issue_id": r.issue_id,
+                    "result": r.calculated_size,
+                    "actual": r.calculated_size,
+                }
+                for r in rows
+            ]
         except Exception as err:
             from app.core.logging import get_logger
-            get_logger(__name__).warning("evaluate_recent_accuracy_route_error", error=str(err))
+            get_logger(__name__).warning("get_game_history_route_error", error=str(err))
             prediction["recent_history"] = []
 
         return prediction

@@ -182,3 +182,50 @@ class SourceClient:
             error_message=err_msg,
             used_endpoint=self.primary_url,
         )
+
+    async def fetch_history_complete(
+        self, max_records: int = 10000, page_size: int = 50
+    ) -> list[FetchResult]:
+        """
+        Fetch maximum reliable historical records from the source API using pagination.
+
+        Follows pagination until:
+        a) source reports no more records or returns an empty list
+        b) max_records limit is reached
+        c) page safety boundary is reached
+
+        Args:
+            max_records: Max records to retrieve across all pages (default: 10,000).
+            page_size: Size per page request (default: 50).
+
+        Returns:
+            List of FetchResult objects for all successfully retrieved pages.
+        """
+        results: list[FetchResult] = []
+        total_fetched = 0
+        max_pages = (max_records // page_size) + 5
+
+        for page_no in range(1, max_pages + 1):
+            fetch_res = await self.fetch_history(page_no=page_no, page_size=page_size)
+            if not fetch_res.success or not fetch_res.data:
+                break
+
+            results.append(fetch_res)
+
+            # Extract list count from payload if available
+            data_body = fetch_res.data.get("data", {})
+            list_data = data_body.get("list", []) if isinstance(data_body, dict) else []
+            if not list_data:
+                break
+
+            total_fetched += len(list_data)
+            if total_fetched >= max_records:
+                break
+
+        logger.info(
+            "fetch_history_complete_finished",
+            pages_fetched=len(results),
+            approx_records=total_fetched,
+            max_records=max_records,
+        )
+        return results

@@ -29,6 +29,8 @@ class LifecycleTelemetryCollector:
     def __init__(self, max_history: int = 1000):
         self.max_history = max_history
         self._records: deque[dict] = deque(maxlen=max_history)
+        self._ai_records: deque[dict] = deque(maxlen=max_history)
+        self._provider_latencies: dict[str, list[float]] = {}
 
     def record_cycle(self, telemetry_data: dict):
         """Record completed telemetry cycle and compute deltas."""
@@ -54,36 +56,101 @@ class LifecycleTelemetryCollector:
         }
         self._records.append(full_record)
 
+    def record_ai_request(
+        self,
+        provider: str,
+        model: str,
+        request_started_at: float,
+        request_duration_ms: float,
+        success: bool,
+        timeout: bool,
+        http_status_category: str,
+        fallback_used: bool,
+        ai_contribution_status: str,
+    ):
+        """Record safe metadata and latency metrics for AI provider request."""
+        record = {
+            "provider": provider,
+            "model": model,
+            "request_started_at": request_started_at,
+            "request_duration_ms": request_duration_ms,
+            "success": success,
+            "timeout": timeout,
+            "http_status_category": http_status_category,
+            "fallback_used": fallback_used,
+            "ai_contribution_status": ai_contribution_status,
+        }
+        self._ai_records.append(record)
+
+        prov_key = provider.lower()
+        if prov_key not in self._provider_latencies:
+            self._provider_latencies[prov_key] = []
+        self._provider_latencies[prov_key].append(request_duration_ms)
+        # Keep latencies within max_history size
+        if len(self._provider_latencies[prov_key]) > self.max_history:
+            self._provider_latencies[prov_key].pop(0)
+
+    def _calc_percentiles(self, arr: list[float]) -> dict:
+        n = len(arr)
+        if n == 0:
+            return {"p50": 0.0, "p95": 0.0, "p99": 0.0, "max": 0.0}
+        s_arr = sorted(arr)
+        p50_idx = int(n * 0.50)
+        p95_idx = min(n - 1, int(n * 0.95))
+        p99_idx = min(n - 1, int(n * 0.99))
+        return {
+            "p50": round(float(s_arr[p50_idx]), 2),
+            "p95": round(float(s_arr[p95_idx]), 2),
+            "p99": round(float(s_arr[p99_idx]), 2),
+            "max": round(float(s_arr[-1]), 2),
+        }
+
     def get_summary_stats(self) -> dict:
-        """Calculate rolling percentiles (p50, p95, p99, max) for latencies."""
+        """Calculate rolling percentiles (p50, p95, p99, max) for latencies and AI rates."""
         if not self._records:
-            return {
-                "total_recorded_cycles": 0,
-                "result_to_ready_latency": {"p50": 0.0, "p95": 0.0, "p99": 0.0, "max": 0.0},
-                "analysis_latency": {"p50": 0.0, "p95": 0.0, "p99": 0.0, "max": 0.0},
-            }
+            total_cycles = 0
+            total_latencies = []
+            analysis_latencies = []
+        else:
+            total_cycles = len(self._records)
+            total_latencies = [r["total_result_to_ready_ms"] for r in self._records]
+            analysis_latencies = [r["analysis_ms"] for r in self._records]
 
-        total_latencies = sorted([r["total_result_to_ready_ms"] for r in self._records])
-        analysis_latencies = sorted([r["analysis_ms"] for r in self._records])
+        # Calculate AI Telemetry Rates
+        n_ai = len(self._ai_records)
+        ai_successes = sum(1 for r in self._ai_records if r["success"])
+        ai_timeouts = sum(1 for r in self._ai_records if r["timeout"])
+        ai_errors = sum(1 for r in self._ai_records if not r["success"] and not r["timeout"])
+        fallbacks = sum(1 for r in self._ai_records if r["fallback_used"])
 
-        def calc_percentiles(arr: list[float]) -> dict:
-            n = len(arr)
-            if n == 0:
-                return {"p50": 0.0, "p95": 0.0, "p99": 0.0, "max": 0.0}
-            p50_idx = int(n * 0.50)
-            p95_idx = min(n - 1, int(n * 0.95))
-            p99_idx = min(n - 1, int(n * 0.99))
-            return {
-                "p50": round(float(arr[p50_idx]), 2),
-                "p95": round(float(arr[p95_idx]), 2),
-                "p99": round(float(arr[p99_idx]), 2),
-                "max": round(float(arr[-1]), 2),
-            }
+        provider_usage: dict[str, int] = {}
+        for r in self._ai_records:
+            p = r["provider"]
+            provider_usage[p] = provider_usage.get(p, 0) + 1
+
+        # Extract NVIDIA and OpenRouter latencies specifically
+        nvidia_lats = []
+        openrouter_lats = []
+        for k, v in self._provider_latencies.items():
+            if "nvidia" in k:
+                nvidia_lats.extend(v)
+            elif "openrouter" in k:
+                openrouter_lats.extend(v)
 
         return {
-            "total_recorded_cycles": len(self._records),
-            "result_to_ready_latency": calc_percentiles(total_latencies),
-            "analysis_latency": calc_percentiles(analysis_latencies),
+            "total_recorded_cycles": total_cycles,
+            "result_to_ready_latency": self._calc_percentiles(total_latencies),
+            "analysis_latency": self._calc_percentiles(analysis_latencies),
+            "ai_telemetry": {
+                "total_ai_requests": n_ai,
+                "ai_success_rate": round(ai_successes / n_ai, 4) if n_ai > 0 else 0.0,
+                "ai_timeout_rate": round(ai_timeouts / n_ai, 4) if n_ai > 0 else 0.0,
+                "ai_error_rate": round(ai_errors / n_ai, 4) if n_ai > 0 else 0.0,
+                "fallback_rate": round(fallbacks / n_ai, 4) if n_ai > 0 else 0.0,
+                "provider_usage_count": provider_usage,
+                "nvidia_latency": self._calc_percentiles(nvidia_lats),
+                "openrouter_latency": self._calc_percentiles(openrouter_lats),
+            },
             "latest_cycle": self._records[-1] if self._records else None,
         }
 

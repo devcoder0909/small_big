@@ -44,13 +44,35 @@ class Settings(BaseSettings):
     # API Security
     api_key: str = Field(default="dev-api-key-change-me", alias="API_KEY")
 
-    # AI API Keys for Pattern Rotation
+    # AI API Settings & Failover Architecture
     groq_api_key: str = Field(default="", alias="GROQ_API_KEY")
     groq_api_key_2: str = Field(default="", alias="GROQ_API_KEY_2")
     openrouter_api_key: str = Field(default="", alias="OPENROUTER_API_KEY")
     openrouter_api_key_2: str = Field(default="", alias="OPENROUTER_API_KEY_2")
     openrouter_api_key_3: str = Field(default="", alias="OPENROUTER_API_KEY_3")
+    openrouter_base_url: str = Field(
+        default="https://openrouter.ai/api/v1", alias="OPENROUTER_BASE_URL"
+    )
+    openrouter_model: str = Field(
+        default="meta-llama/llama-3.1-70b-instruct", alias="OPENROUTER_MODEL"
+    )
     gemini_api_key: str = Field(default="", alias="GEMINI_API_KEY")
+    gemini_api_key_2: str = Field(default="", alias="GEMINI_API_KEY_2")
+    nvidia_api_key: str = Field(default="", alias="NVIDIA_API_KEY")
+    nvidia_api_key_2: str = Field(default="", alias="NVIDIA_API_KEY_2")
+    nvidia_base_url: str = Field(
+        default="https://integrate.api.nvidia.com/v1", alias="NVIDIA_BASE_URL"
+    )
+    nvidia_model: str = Field(
+        default="nvidia/nemotron-3-ultra-550b-a55b", alias="NVIDIA_MODEL"
+    )
+
+    # AI Failover, Timeout & Rate-Limit Safety Controls
+    ai_providers: str = Field(default="nvidia,openrouter,groq,gemini", alias="AI_PROVIDERS")
+    ai_max_requests_per_cycle: int = Field(default=1, alias="AI_MAX_REQUESTS_PER_CYCLE")
+    ai_timeout_seconds: float = Field(default=3.0, alias="AI_TIMEOUT_SECONDS")
+    ai_max_retries: int = Field(default=1, alias="AI_MAX_RETRIES")
+    ai_provider_cooldown_seconds: float = Field(default=60.0, alias="AI_PROVIDER_COOLDOWN_SECONDS")
 
     # CORS
     cors_origins: str = Field(default="*", alias="CORS_ORIGINS")
@@ -60,8 +82,12 @@ class Settings(BaseSettings):
     cache_summary_ttl: int = Field(default=5, alias="CACHE_SUMMARY_TTL")
     cache_analytics_ttl: int = Field(default=15, alias="CACHE_ANALYTICS_TTL")
 
-    # Retention
+    # Retention & Analysis Window Depth
     raw_response_retention_days: int = Field(default=30, alias="RAW_RESPONSE_RETENTION_DAYS")
+    max_game_results_retention: int = Field(default=10000, alias="MAX_GAME_RESULTS_RETENTION")
+    analysis_history_window: int = Field(default=10000, alias="ANALYSIS_HISTORY_WINDOW")
+    game_history_fetch_limit: int = Field(default=10000, alias="GAME_HISTORY_FETCH_LIMIT")
+    prediction_analysis_window: int = Field(default=10000, alias="PREDICTION_ANALYSIS_WINDOW")
 
     # Monitoring
     health_degraded_threshold_seconds: int = Field(

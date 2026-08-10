@@ -24,6 +24,9 @@ class EnginePrediction(Base):
     active_indicators = Column(Integer, nullable=True)
     created_at_ms = Column(BigInteger, nullable=True)
     expires_at_ms = Column(BigInteger, nullable=True)
+    regime_at_prediction = Column(String(64), nullable=True)
+    champion_at_prediction = Column(String(64), nullable=True)
+    analysis_window_at_prediction = Column(Integer, nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (

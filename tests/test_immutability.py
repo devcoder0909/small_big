@@ -13,7 +13,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from sqlalchemy.exc import IntegrityError
 
-from app.analytics.prediction_engine import persist_original_prediction, evaluate_recent_accuracy
+from app.analytics.prediction_engine import persist_original_prediction, get_game_history
 from app.models.engine_prediction import EnginePrediction
 from app.models.game_result import GameResult
 
@@ -75,8 +75,8 @@ async def test_persist_prediction_ignores_duplicate_issue_id():
 
 
 @pytest.mark.asyncio
-async def test_evaluate_recent_accuracy_uses_stored_immutable_predictions():
-    """Verify accuracy evaluation reads original stored predictions, not newly generated predictions."""
+async def test_get_game_history_uses_stored_immutable_game_results():
+    """Verify game history reads original stored GameResult rows, not predictions."""
     mock_session = AsyncMock()
 
     rows = [
@@ -84,21 +84,14 @@ async def test_evaluate_recent_accuracy_uses_stored_immutable_predictions():
         MockRow("SMALL", "500001"),
     ]
 
-    # Stored immutable prediction for 500002 was SMALL (which lost)
-    stored_ep = EnginePrediction(
-        issue_id="500002",
-        predicted_size="SMALL",
-        confidence=0.75,
-    )
-
     mock_exec = MagicMock()
-    mock_exec.scalars.return_value.all.return_value = [stored_ep]
+    mock_exec.scalars.return_value.all.return_value = rows
     mock_session.execute.return_value = mock_exec
 
-    results = await evaluate_recent_accuracy(mock_session, rows)
+    results = await get_game_history(mock_session, limit=10)
 
     assert len(results) >= 1
     assert results[0]["issue_id"] == "500002"
-    assert results[0]["predicted_size"] == "SMALL"  # Immutable original prediction
-    assert results[0]["size"] == "BIG"             # Actual result
-    assert results[0]["is_win"] is False           # Win = False
+    assert results[0]["result"] == "BIG"
+    assert "predicted" not in results[0]
+    assert "is_win" not in results[0]

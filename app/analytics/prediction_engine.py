@@ -22,11 +22,13 @@ IMPORTANT DISCLAIMERS:
 
 import math
 import time
+import asyncio
 from datetime import datetime, timezone
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.game_result import GameResult
 from app.models.engine_prediction import EnginePrediction
+from app.core import get_settings
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -61,7 +63,7 @@ def _calculate_shannon_entropy(sizes: list[str]) -> float:
     if not sizes:
         return 1.0
     total = len(sizes)
-    small_count = sum(1 for s in sizes if s == "SMALL")
+    small_count = sizes.count("SMALL")
     p_small = small_count / total
     p_big = 1.0 - p_small
 
@@ -81,9 +83,9 @@ def _calculate_z_score(sizes: list[str]) -> tuple[float, float]:
     n = len(sizes)
     if n == 0:
         return 0.0, 1.0
-    small_count = sum(1 for s in sizes if s == "SMALL")
+    small_count = sizes.count("SMALL")
     expected_mean = n * 0.5
-    std_dev = math.sqrt(n * 0.5 * 0.5)
+    std_dev = math.sqrt(n * 0.25)
 
     if std_dev == 0:
         return 0.0, 1.0
@@ -100,10 +102,11 @@ def _analyze_streak_indicator(sizes: list[str]) -> dict:
     if len(sizes) < 10:
         return {"prediction": None, "confidence": 0, "reason": "insufficient_data"}
 
-    current = sizes[0]
+    scan_sizes = sizes[:min(1000, len(sizes))]
+    current = scan_sizes[0]
     streak_len = 1
-    for i in range(1, len(sizes)):
-        if sizes[i] == current:
+    for i in range(1, len(scan_sizes)):
+        if scan_sizes[i] == current:
             streak_len += 1
         else:
             break
@@ -113,8 +116,8 @@ def _analyze_streak_indicator(sizes: list[str]) -> dict:
     break_count = 0
 
     s_len = 1
-    for i in range(len(sizes) - 2, -1, -1):
-        if sizes[i] == sizes[i + 1]:
+    for i in range(len(scan_sizes) - 2, -1, -1):
+        if scan_sizes[i] == scan_sizes[i + 1]:
             s_len += 1
         else:
             if s_len == streak_len:
@@ -157,15 +160,16 @@ def _analyze_markov_transition_indicator(sizes: list[str]) -> dict:
     weights = {4: 0.4, 3: 0.3, 2: 0.2, 1: 0.1}
     details = []
 
+    scan_len = min(1000, len(sizes))
     for order in (4, 3, 2, 1):
         if len(sizes) <= order:
             continue
-        context = tuple(sizes[:order])
+        context = sizes[:order]
         same_next = 0
         opp_next = 0
 
-        for i in range(order, len(sizes) - 1):
-            if tuple(sizes[i - order + 1 : i + 1]) == context:
+        for i in range(order, scan_len - 1):
+            if sizes[i - order + 1 : i + 1] == context:
                 next_item = sizes[i - order]
                 if next_item == "SMALL":
                     same_next += 1
@@ -292,15 +296,16 @@ def _analyze_multi_ngram_pattern_indicator(sizes: list[str]) -> dict:
     big_votes = 0.0
     pattern_matches_info = []
 
+    scan_len = min(1000, len(sizes))
     for n in (6, 5, 4, 3, 2):
         if len(sizes) <= n:
             continue
-        pattern = tuple(sizes[:n])
+        pattern = sizes[:n]
         match_small = 0
         match_big = 0
 
-        for i in range(n, len(sizes)):
-            if tuple(sizes[i - n + 1 : i + 1]) == pattern and i - n >= 0:
+        for i in range(n, scan_len):
+            if sizes[i - n + 1 : i + 1] == pattern and i - n >= 0:
                 next_val = sizes[i - n]
                 if next_val == "SMALL":
                     match_small += 1
@@ -510,21 +515,22 @@ def _analyze_runs_test_indicator(sizes: list[str]) -> dict:
 def _analyze_sequence_hash_miner_indicator(sizes: list[str]) -> dict:
     """
     Historical Sequence Hash Mining (Exact N-Bit State Vector Matcher).
-    Converts current 5-draw sequence vector into a hash, searches historical records (up to 500 draws)
+    Converts current 5-draw sequence vector into a hash, searches historical records (up to 1,000 draws)
     for exact pattern matches, and computes the empirical historical next-draw outcome distribution.
     """
     if len(sizes) < 25:
         return {"prediction": None, "confidence": 0, "reason": "insufficient_data"}
 
     pattern_len = 5
-    current_pattern = tuple(sizes[:pattern_len])
+    current_pattern = sizes[:pattern_len]
 
     small_count = 0
     big_count = 0
+    scan_len = min(1000, len(sizes))
 
     # Scan history for exact pattern matches
-    for i in range(pattern_len, len(sizes) - 1):
-        if tuple(sizes[i : i + pattern_len]) == current_pattern:
+    for i in range(pattern_len, scan_len - 1):
+        if sizes[i : i + pattern_len] == current_pattern:
             next_outcome = sizes[i - 1]
             if next_outcome == "SMALL":
                 small_count += 1
@@ -630,9 +636,10 @@ def _analyze_monte_carlo_simulator_indicator(sizes: list[str]) -> dict:
     if len(sizes) < 20:
         return {"prediction": None, "confidence": 0, "reason": "insufficient_data"}
 
+    scan_sizes = sizes[:min(1000, len(sizes))]
     s_to_s, s_to_b, b_to_s, b_to_b = 0, 0, 0, 0
-    for i in range(len(sizes) - 1):
-        curr, prev = sizes[i], sizes[i + 1]
+    for i in range(len(scan_sizes) - 1):
+        curr, prev = scan_sizes[i], scan_sizes[i + 1]
         if prev == "SMALL" and curr == "SMALL":
             s_to_s += 1
         elif prev == "SMALL" and curr == "BIG":
@@ -764,13 +771,13 @@ def _calculate_adaptive_indicator_weights(sizes: list[str], base_weights: dict, 
     indicator_wins = {name: 0 for name in eval_funcs}
     indicator_votes = {name: 0 for name in eval_funcs}
 
-    # Evaluate last 12 draws
+    # Evaluate last 12 draws (using bounded 200-draw evaluation slices for compute efficiency)
     eval_depth = min(12, len(sizes) - 15)
     for i in range(1, eval_depth + 1):
         actual = sizes[i - 1]
-        prior_slice = sizes[i:]
-        prior_num_slice = numbers[i:] if numbers and len(numbers) > i else None
-        prior_col_slice = colors[i:] if colors and len(colors) > i else None
+        prior_slice = sizes[i:i + 200]
+        prior_num_slice = numbers[i:i + 200] if numbers and len(numbers) > i else None
+        prior_col_slice = colors[i:i + 200] if colors and len(colors) > i else None
 
         for name, fn in eval_funcs.items():
             res = fn(prior_slice, prior_num_slice, prior_col_slice)
@@ -873,29 +880,35 @@ def _score_indicators(indicators: dict, weights: dict) -> tuple:
 
 
 async def generate_prediction(
-    session: AsyncSession, window: int = 500
+    session: AsyncSession, window: int | None = None
 ) -> dict:
     """
-    Generate an advanced 10-Indicator God-Mode Ensemble statistical prediction.
+    Generate an advanced 15-Indicator Ensemble statistical prediction with Adaptive Window Selection.
 
-    Combines 10 independent mathematical, structural, Bayesian, and randomness-test indicators
-    with squared-confidence amplification, multi-tier confluence boosting, and AI LLM reasoning.
-
-    Args:
-        session: Active database session.
-        window: Number of recent records to analyze.
-
-    Returns:
-        Dict with prediction, confidence, entropy, and indicator breakdown.
+    Combines 15 independent mathematical, structural, Bayesian, and randomness-test indicators
+    with squared-confidence amplification, multi-horizon regime detection, and AI LLM reasoning.
     """
+    t_start_total = time.monotonic()
+
+    # Determine candidate window & pre-fetch regime
+    from app.analytics.adaptive_window_selector import adaptive_window_selector
+
+    if window is None:
+        default_limit = get_settings().prediction_analysis_window
+    else:
+        default_limit = window
+
+    t0_db = time.monotonic()
     query = (
         select(GameResult.calculated_size, GameResult.issue_id, GameResult.result_number, GameResult.source_color)
         .order_by(desc(GameResult.issue_id))
-        .limit(window)
+        .limit(max(default_limit, 1000))
     )
 
     result = await session.execute(query)
     rows = result.fetchall()
+    t1_db = time.monotonic()
+    database_ms = (t1_db - t0_db) * 1000.0
 
     if len(rows) < 5:
         return {
@@ -908,12 +921,25 @@ async def generate_prediction(
             "label": "STATISTICAL ANALYSIS — NOT A GUARANTEE",
         }
 
-    # === PRE-PREDICTION DATA GATE: STRICT CHRONOLOGICAL CONTINUITY CHECK ===
+    # === PRE-PREDICTION DATA GATE: ZERO-MISSING-DATA CONTINUITY & VALIDITY CHECK ===
     if len(rows) >= 2:
-        for i in range(min(10, len(rows) - 1)):
+        for i in range(len(rows) - 1):
             try:
                 curr_id = int(rows[i].issue_id)
                 prev_id = int(rows[i + 1].issue_id)
+                # Check invalid numbers or sizes
+                if not (0 <= rows[i].result_number <= 9) or rows[i].calculated_size not in ("BIG", "SMALL"):
+                    return {
+                        "upcoming_issue_id": None,
+                        "prediction": None,
+                        "confidence": 0,
+                        "status": "INSUFFICIENT_DATA",
+                        "reason": "HISTORICAL_DATA_GAP",
+                        "message": f"Malformed historical record detected at period #{rows[i].issue_id}",
+                        "total_records_analyzed": len(rows),
+                        "label": "STATISTICAL ANALYSIS — NOT A GUARANTEE",
+                    }
+                # Check continuity gap
                 if curr_id - prev_id != 1:
                     logger.warning(
                         "pre_prediction_data_gate_gap_detected",
@@ -921,17 +947,34 @@ async def generate_prediction(
                         prev_issue=rows[i + 1].issue_id,
                         gap_count=curr_id - prev_id - 1,
                     )
+                    # Trigger background recovery asynchronously if possible
+                    try:
+                        from app.services.recovery_service import recover_missing_records
+                        asyncio.create_task(recover_missing_records(session))
+                    except Exception:
+                        pass
+
                     return {
                         "upcoming_issue_id": None,
                         "prediction": None,
                         "confidence": 0,
                         "status": "INSUFFICIENT_DATA",
+                        "reason": "HISTORICAL_DATA_GAP",
                         "message": f"Historical data gap detected between period #{prev_id} and #{curr_id}",
                         "total_records_analyzed": len(rows),
                         "label": "STATISTICAL ANALYSIS — NOT A GUARANTEE",
                     }
             except (ValueError, TypeError):
-                pass
+                return {
+                    "upcoming_issue_id": None,
+                    "prediction": None,
+                    "confidence": 0,
+                    "status": "INSUFFICIENT_DATA",
+                    "reason": "HISTORICAL_DATA_GAP",
+                    "message": "Malformed issue ID in historical records",
+                    "total_records_analyzed": len(rows),
+                    "label": "STATISTICAL ANALYSIS — NOT A GUARANTEE",
+                }
 
     sizes = [row.calculated_size for row in rows]
     numbers = [row.result_number for row in rows]
@@ -942,11 +985,37 @@ async def generate_prediction(
     shannon_entropy = _calculate_shannon_entropy(sizes[:50])
     z_score, p_small = _calculate_z_score(sizes)
 
-    # Run all 15 indicators
-    indicators = _run_all_indicators(sizes, numbers, colors)
+    # Pre-detect regime for adaptive window selection
+    t0_regime = time.monotonic()
+    from app.analytics.regime_detector import detect_market_regime
+    regime_info = detect_market_regime(sizes, shannon_entropy)
+    regime_name = regime_info.get("regime", "STABLE_NEUTRAL")
+    t1_regime = time.monotonic()
+    regime_ms = (t1_regime - t0_regime) * 1000.0
+
+    # Adaptive Window Selection
+    t0_win = time.monotonic()
+    if window is None:
+        selected_win, win_meta = adaptive_window_selector.select_optimal_window(regime_name)
+        analysis_window = min(selected_win, len(sizes))
+    else:
+        analysis_window = min(window, len(sizes))
+        win_meta = {"selected_window": analysis_window, "reason": "explicit_user_override"}
+    t1_win = time.monotonic()
+    window_selection_ms = (t1_win - t0_win) * 1000.0
+
+    # Multi-Scale Feature Extraction (Slices: SHORT 25/50, MEDIUM 100/250/500, LONG 1000+)
+    t0_fe = time.monotonic()
+    sizes_active = sizes[:analysis_window]
+    numbers_active = numbers[:analysis_window] if numbers else None
+    colors_active = colors[:analysis_window] if colors else None
+
+    indicators = _run_all_indicators(sizes_active, numbers_active, colors_active)
+    t1_fe = time.monotonic()
+    feature_extraction_ms = (t1_fe - t0_fe) * 1000.0
 
     # Fetch AI Pattern Reasoning via Key Rotation (Groq, OpenRouter, Gemini)
-    # Pass full indicator breakdown to AI for contextual reasoning
+    t_start_ai = time.monotonic()
     ai_reasoning = None
     try:
         from app.analytics.ai_rotator import fetch_ai_prediction
@@ -959,7 +1028,17 @@ async def generate_prediction(
                 if ind.get("prediction")
             },
         }
-        ai_res = await fetch_ai_prediction(sizes, indicator_summary)
+        try:
+            settings = get_settings()
+            ai_timeout = float(getattr(settings, "ai_timeout_seconds", 3.0))
+            ai_res = await asyncio.wait_for(
+                fetch_ai_prediction(sizes, indicator_summary),
+                timeout=ai_timeout
+            )
+        except (asyncio.TimeoutError, TimeoutError):
+            logger.warning("ai_prediction_timeout_exceeded", timeout_seconds=ai_timeout)
+            ai_res = None
+
         if ai_res and ai_res.get("ai_prediction"):
             ai_reasoning = ai_res
             indicators["ai_pattern_reasoning"] = {
@@ -971,9 +1050,20 @@ async def generate_prediction(
             }
     except Exception as ai_err:
         logger.warning("ai_rotator_integration_warning", error=str(ai_err))
+    t_end_ai = time.monotonic()
 
     # Self-Learning Adaptive Weighting based on real-time win-streak accuracy
+    t_start_weights = time.monotonic()
     weights = _calculate_adaptive_indicator_weights(sizes, DEFAULT_WEIGHTS, numbers, colors)
+    t_end_weights = time.monotonic()
+
+    logger.info(
+        "generate_prediction_profiling",
+        n_records=len(rows),
+        run_indicators_ms=round(feature_extraction_ms, 2),
+        ai_call_ms=round((t_end_ai - t_start_ai) * 1000, 2),
+        adaptive_weights_ms=round((t_end_weights - t_start_weights) * 1000, 2),
+    )
 
     # Adaptive Dynamic Weighting based on Shannon Entropy & Z-Score
     if shannon_entropy < 0.90:
@@ -1131,11 +1221,14 @@ async def generate_prediction(
 
     confidence = max(0.500, min(0.920, real_confidence))
 
-    if confidence >= 0.72:
+    if confidence >= 0.72 and agreeing >= 8:
+        edge_level = "HIGH EDGE"
         confidence_level = "HIGH"
-    elif confidence >= 0.56:
+    elif confidence >= 0.58 and agreeing >= 6:
+        edge_level = "MEDIUM EDGE"
         confidence_level = "MEDIUM"
     else:
+        edge_level = "LOW EDGE"
         confidence_level = "LOW"
 
     upcoming_issue_id = None
@@ -1146,9 +1239,29 @@ async def generate_prediction(
             upcoming_issue_id = None
 
     now_ms = int(time.time() * 1000)
+    t_end_total = time.monotonic()
+    total_ms = (t_end_total - t_start_total) * 1000.0
 
     # Compute Brier score metric against latest history sample
     brier_score = round((1.0 - raw_prob) ** 2, 4)
+
+    telemetry = {
+        "latest_confirmed_period": latest_issue,
+        "target_period": upcoming_issue_id,
+        "rows_loaded": len(rows),
+        "selected_window": analysis_window,
+        "regime": regime_name,
+        "champion_strategy": strategy_used,
+        "edge_level": edge_level,
+        "confidence": confidence,
+        "latency_ms": {
+            "database_ms": round(database_ms, 2),
+            "regime_ms": round(regime_ms, 2),
+            "window_selection_ms": round(window_selection_ms, 2),
+            "feature_extraction_ms": round(feature_extraction_ms, 2),
+            "total_ms": round(total_ms, 2),
+        },
+    }
 
     return {
         "prediction_id": upcoming_issue_id,
@@ -1157,12 +1270,14 @@ async def generate_prediction(
         "prediction_probability": raw_prob,
         "confidence": confidence,
         "confidence_level": confidence_level,
+        "edge_level": edge_level,
         "confluence_level": confluence_level,
         "created_at_ms": now_ms,
         "shannon_entropy": shannon_entropy,
         "z_score": z_score,
         "regime": regime_name,
         "strategy_used": strategy_used,
+        "selected_window": analysis_window,
         "top_contributing_indicators": top_5_contributors,
         "agreement_pct": round(consensus_ratio * 100, 1),
         "brier_score": brier_score,
@@ -1171,6 +1286,7 @@ async def generate_prediction(
         "active_indicators": active_indicators,
         "agreeing_indicators": agreeing,
         "indicators": indicators,
+        "telemetry": telemetry,
         "current_state": {
             "latest_size": sizes[0] if sizes else None,
             "current_streak": _get_current_streak(sizes),
@@ -1227,6 +1343,9 @@ async def persist_original_prediction(session: AsyncSession, prediction_res: dic
                 confluence_level=prediction_res.get("confluence_level"),
                 agreeing_indicators=prediction_res.get("agreeing_indicators"),
                 active_indicators=prediction_res.get("active_indicators"),
+                regime_at_prediction=prediction_res.get("regime"),
+                champion_at_prediction=prediction_res.get("strategy_used"),
+                analysis_window_at_prediction=prediction_res.get("selected_window"),
                 created_at_ms=prediction_res.get("created_at_ms"),
                 created_at=datetime.now(timezone.utc),
             ).on_conflict_do_nothing(index_elements=["issue_id"])
@@ -1243,6 +1362,9 @@ async def persist_original_prediction(session: AsyncSession, prediction_res: dic
                     confluence_level=prediction_res.get("confluence_level"),
                     agreeing_indicators=prediction_res.get("agreeing_indicators"),
                     active_indicators=prediction_res.get("active_indicators"),
+                    regime_at_prediction=prediction_res.get("regime"),
+                    champion_at_prediction=prediction_res.get("strategy_used"),
+                    analysis_window_at_prediction=prediction_res.get("selected_window"),
                     created_at_ms=prediction_res.get("created_at_ms"),
                     created_at=datetime.now(timezone.utc),
                 )
@@ -1256,77 +1378,40 @@ async def persist_original_prediction(session: AsyncSession, prediction_res: dic
         logger.warning("persist_original_prediction_failed", error=str(err))
 
 
-async def evaluate_recent_accuracy(session: AsyncSession, rows: list) -> list[dict]:
+async def get_game_history(session: AsyncSession, limit: int = 20) -> list[dict]:
     """
-    Evaluate accuracy of predictions using the IMMUTABLE AUDIT TRAIL.
-
-    Guarantees:
-    - Reads original predicted_size stored in engine_predictions table.
-    - Original predicted_size is NEVER modified, updated, or rewritten retroactively.
-    - Compares immutable original predicted_size against actual calculated_size.
-
-    Args:
-        session: Active database session.
-        rows: GameResult rows ordered by issue_id desc.
-
-    Returns:
-        List of dicts with issue_id, result, size, predicted_size, is_win.
+    Fetch authoritative real game history directly from GameResult.
+    Contains ONLY real observed game outcomes (period, result/actual).
+    Does NOT query EnginePrediction, calculate predictions, or compute WIN/LOSS accuracy.
     """
-    if len(rows) < 2:
-        return []
+    stmt = select(GameResult).order_by(desc(GameResult.issue_id)).limit(limit)
+    res = await session.execute(stmt)
+    rows = res.scalars().all()
+    return [
+        {
+            "period": r.issue_id,
+            "issue_id": r.issue_id,
+            "result": r.calculated_size,
+            "actual": r.calculated_size,
+            "result_number": r.result_number,
+            "color": r.source_color,
+        }
+        for r in rows
+    ]
 
-    # Fetch stored immutable predictions for recent issue IDs
-    stored_preds = {}
-    try:
-        issue_ids = [r.issue_id for r in rows[:15]]
-        stmt = select(EnginePrediction).where(EnginePrediction.issue_id.in_(issue_ids))
-        res = await session.execute(stmt)
-        stored_preds = {ep.issue_id: ep for ep in res.scalars().all()}
-    except Exception as err:
-        logger.warning("fetch_stored_predictions_warning", error=str(err))
 
-    all_sizes = [r.calculated_size for r in rows]
-    all_numbers = [r.result_number for r in rows]
-    all_colors = [r.source_color for r in rows]
-    adaptive_weights = _calculate_adaptive_indicator_weights(all_sizes, DEFAULT_WEIGHTS, all_numbers, all_colors)
-
-    results = []
-    for i in range(min(5, len(rows))):
-        current_row = rows[i]
-        issue_id = current_row.issue_id
-
-        if issue_id in stored_preds:
-            # === IMMUTABLE AUDIT TRAIL RECORD ===
-            # Exact original predicted_size stored before the draw occurred
-            pred = stored_preds[issue_id].predicted_size
-        else:
-            # Fallback for historical rows prior to table creation
-            prior_sizes = all_sizes[i + 1 :]
-            prior_numbers = all_numbers[i + 1 :]
-            prior_colors = all_colors[i + 1 :]
-            if len(prior_sizes) < 5:
-                continue
-
-            indicators = _run_all_indicators(prior_sizes, prior_numbers, prior_colors)
-            small_score, big_score, total_weight, active = _score_indicators(
-                indicators, adaptive_weights
-            )
-
-            sum_active = small_score + big_score
-            if sum_active > 0:
-                pred = "SMALL" if small_score > big_score else "BIG"
-            else:
-                pred = prior_sizes[0]
-
-        is_win = pred == current_row.calculated_size
-        results.append({
-            "issue_id": current_row.issue_id,
-            "result": current_row.result_number,
-            "size": current_row.calculated_size,
-            "color": current_row.source_color,
-            "predicted_size": pred,
-            "is_win": is_win,
-            "prediction_status": "WIN" if is_win else "LOSS",
-        })
-
-    return results
+async def evaluate_recent_accuracy(session: AsyncSession, rows: list = None) -> list[dict]:
+    """Deprecated alias for get_game_history. Returns strictly real GameResult records."""
+    if isinstance(rows, list) and rows:
+        return [
+            {
+                "period": r.issue_id,
+                "issue_id": r.issue_id,
+                "result": r.calculated_size,
+                "actual": r.calculated_size,
+                "result_number": r.result_number,
+                "color": r.source_color,
+            }
+            for r in rows[:20]
+        ]
+    return await get_game_history(session, limit=20)

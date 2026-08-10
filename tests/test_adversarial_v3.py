@@ -52,7 +52,7 @@ async def test_adversarial_future_target_result_injection():
     mock_exec.fetchall.return_value = base_rows
     mock_session.execute.return_value = mock_exec
 
-    pred = await generate_prediction(mock_session, 500)
+    pred = await generate_prediction(mock_session, 5000)
 
     assert pred["upcoming_issue_id"] == "52250"
     assert pred["status"] in ("ACTIVE", "READY")

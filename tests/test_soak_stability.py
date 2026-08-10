@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock
 from app.analytics.prediction_engine import (
     generate_prediction,
     persist_original_prediction,
-    evaluate_recent_accuracy,
+    get_game_history,
 )
 
 
@@ -72,7 +72,7 @@ async def test_soak_prediction_generation_150_periods():
 
 @pytest.mark.asyncio
 async def test_soak_accuracy_calculation_formula():
-    """Verify accuracy formula is mathematically exact: wins / total * 100."""
+    """Verify game history returns clean list of GameResult entries."""
     rows = [
         MockRow("SMALL", "202608100100", 2),
         MockRow("BIG", "202608100099", 8),
@@ -83,14 +83,11 @@ async def test_soak_accuracy_calculation_formula():
     ]
 
     mock_exec = MagicMock()
-    mock_exec.scalars().all.return_value = []
+    mock_exec.scalars().all.return_value = rows
     mock_session = AsyncMock()
     mock_session.execute.return_value = mock_exec
 
-    history = await evaluate_recent_accuracy(mock_session, rows)
-    if history:
-        wins = sum(1 for h in history if h["is_win"])
-        total = len(history)
-        expected_pct = (wins / total) * 100
-        assert history[0]["predicted_size"] in ("SMALL", "BIG")
-        assert 0.0 <= expected_pct <= 100.0
+    history = await get_game_history(mock_session, limit=10)
+    assert len(history) == 6
+    assert history[0]["result"] == "SMALL"
+    assert "predicted" not in history[0]

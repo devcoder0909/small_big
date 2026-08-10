@@ -54,7 +54,7 @@ async def test_generate_prediction_operates_when_ai_rotator_fails():
     mock_session.execute.return_value = mock_exec
 
     with patch("app.analytics.ai_rotator.fetch_ai_prediction", side_effect=Exception("LLM Timeout")):
-        pred = await generate_prediction(mock_session, 500)
+        pred = await generate_prediction(mock_session, 5000)
 
         assert pred["status"] == "ACTIVE" or pred["status"] == "READY"
         assert pred["prediction"] in ("BIG", "SMALL")

@@ -38,47 +38,63 @@ async def recover_missing_records(session: AsyncSession) -> dict:
     )
     latest_known = result.scalar_one_or_none()
 
-    # Fetch from source (deep page size 50 for max historical coverage)
+    # Fetch complete history from source using pagination up to configured limit
     client = SourceClient()
     try:
-        fetch_result = await client.fetch_history(page_no=1, page_size=50)
+        fetch_results = await client.fetch_history_complete(
+            max_records=settings.game_history_fetch_limit, page_size=50
+        )
     finally:
         await client.close()
 
-    if not fetch_result.success or not fetch_result.data:
-        logger.error("recovery_fetch_failed", error=fetch_result.error_message)
+    if not fetch_results:
+        logger.error("recovery_fetch_failed", error="No response received from source API")
         return {
             "status": "FETCH_FAILED",
-            "error": fetch_result.error_message,
+            "error": "No response received from source API",
             "recovered": 0,
         }
 
-    # Parse
-    try:
-        parsed = parse_history_response(fetch_result.data)
-    except ValueError as e:
-        return {"status": "PARSE_FAILED", "error": str(e), "recovered": 0}
+    # Aggregate & parse all fetched pages
+    all_parsed = []
+    source_time = None
+    for res in fetch_results:
+        if res.success and res.data:
+            try:
+                page_parsed = parse_history_response(res.data)
+                all_parsed.extend(page_parsed)
+                if not source_time:
+                    source_time = extract_service_time(res.data)
+            except ValueError:
+                continue
 
-    valid, errors = validate_batch(parsed)
+    valid, errors = validate_batch(all_parsed)
 
     if not valid:
         return {"status": "NO_VALID_RECORDS", "recovered": 0}
 
+    # Deduplicate & sort chronologically
+    seen = set()
+    deduped_valid = []
+    for r in valid:
+        if r.issue_id not in seen:
+            seen.add(r.issue_id)
+            deduped_valid.append(r)
+
     # Find records we don't have
     new_records = []
     if latest_known:
-        for r in valid:
+        for r in deduped_valid:
             if r.issue_id > latest_known:
                 new_records.append(r)
     else:
-        new_records = valid  # First run — insert all
+        new_records = deduped_valid  # First run — insert all
 
     if not new_records:
         logger.info("recovery_no_missing_records")
         return {"status": "UP_TO_DATE", "recovered": 0}
 
     # Insert missing records
-    source_time = extract_service_time(fetch_result.data)
     batch_result = await upsert_batch(
         session,
         new_records,

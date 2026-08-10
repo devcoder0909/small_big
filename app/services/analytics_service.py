@@ -28,7 +28,7 @@ async def get_summary(session: AsyncSession) -> dict:
     total = await get_total_count(session)
     freq_100 = await calculate_frequency(session, 100)
     streaks = await calculate_streaks(session, 200)
-    prediction = await generate_prediction(session, 500)
+    prediction = await generate_prediction(session, settings.prediction_analysis_window)
     anomalies = await detect_anomalies(session, 200)
 
     result = {

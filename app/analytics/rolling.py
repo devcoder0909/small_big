@@ -4,11 +4,11 @@ from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.game_result import GameResult
 
-ROLLING_WINDOWS = [20, 50, 100, 500]
+ROLLING_WINDOWS = [20, 50, 100, 500, 1000, 2000, 5000, 10000]
 
 
 async def calculate_rolling_stats(
-    session: AsyncSession, max_records: int = 1000
+    session: AsyncSession, max_records: int = 10000
 ) -> list[dict]:
     """
     Calculate rolling window statistics.

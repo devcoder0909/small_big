@@ -98,7 +98,7 @@ async def run_benchmark():
     print(f"\n--- End-to-End Prediction Benchmark ({e2e_iterations:,} iterations) ---")
     t0 = time.perf_counter()
     for _ in range(e2e_iterations):
-        res = await generate_prediction(mock_session, window=500)
+        res = await generate_prediction(mock_session, window=5000)
     total_time = time.perf_counter() - t0
     avg_e2e_ms = (total_time / e2e_iterations) * 1000
     throughput = e2e_iterations / total_time

@@ -12,7 +12,7 @@ from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
-WINDOWS = [25, 50, 100, 250, 500, 1000]
+WINDOWS = [25, 50, 100, 250, 500, 1000, 2500, 5000, 10000]
 
 
 class ChampionSelector:
@@ -22,7 +22,7 @@ class ChampionSelector:
         self._strategy_wins: dict[str, int] = {k: 0 for k in STRATEGY_REGISTRY}
         self._strategy_votes: dict[str, int] = {k: 0 for k in STRATEGY_REGISTRY}
         self._regime_performance: dict[str, dict[str, list[int]]] = {}
-        self._history: deque[dict] = deque(maxlen=1000)
+        self._history: deque[dict] = deque(maxlen=10000)
         self._drift_status: dict = {"drift_detected": False, "message": "Champion performing optimally"}
 
     def select_champion_strategy(
