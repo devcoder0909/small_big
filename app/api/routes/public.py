@@ -150,9 +150,9 @@ async function updateData() {
       document.getElementById('pred-status').innerHTML = '<span class="status-dot waiting"></span>Waiting for data';
     }
 
-    // Real Game History section
+    // Real Game History section (show top 5)
     if (data.recent_history && data.recent_history.length > 0) {
-      var hist = data.recent_history;
+      var hist = data.recent_history.slice(0, 5);
       var tbody = document.getElementById('history-body');
       tbody.innerHTML = hist.map(function(item) {
         var outcome = item.result || item.actual || item.size || '---';
@@ -201,10 +201,10 @@ async def get_public_prediction(session: AsyncSession = Depends(get_session)):
 
         prediction["server_time_ms"] = int(time.time() * 1000)
 
-        # Attach real GameResult history (authoritative observed outcomes only)
+        # Attach real GameResult history (authoritative observed outcomes only — top 5)
         try:
             rows_query = await session.execute(
-                select(GameResult).order_by(desc(GameResult.issue_id)).limit(20)
+                select(GameResult).order_by(desc(GameResult.issue_id)).limit(5)
             )
             rows = rows_query.scalars().all()
             prediction["recent_history"] = [
