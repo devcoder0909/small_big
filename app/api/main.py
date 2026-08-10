@@ -14,6 +14,7 @@ from app.api.routes import health, results, analytics, admin, public
 async def lifespan(app: FastAPI):
     """Application lifespan — setup and teardown."""
     setup_logging()
+    settings = get_settings()
     try:
         from app.core.database import engine
         from app.models import Base
