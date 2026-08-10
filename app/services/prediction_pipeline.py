@@ -39,7 +39,7 @@ class PredictionPipeline:
     Event-driven prediction pipeline with explicit state machine.
     """
 
-    def __init__(self, stale_threshold_seconds: float = 90.0):
+    def __init__(self, stale_threshold_seconds: float = 180.0):
         self._lock = asyncio.Lock()
         self._current_prediction: dict | None = None
         self._latest_processed_issue: str | None = None
@@ -151,31 +151,11 @@ class PredictionPipeline:
                                     "prediction": None,
                                     "confidence": 0,
                                     "status": PipelineState.STALE_DATA.value,
-                                    "message": "Source data is stale — prediction paused for data safety",
+                                    "message": f"Source data is stale ({int(age_sec)}s old) — prediction paused for data safety",
                                     "server_time_ms": int(time.time() * 1000),
                                 }
                                 self._analyzing_issue = None
                                 return
-
-                    # Check for sequence gaps
-                    try:
-                        gaps = await detect_gaps(session)
-                    except Exception:
-                        gaps = []
-
-                    if gaps:
-                        logger.warning("pipeline_unresolved_gaps_detected", gaps=gaps)
-                        self._state = PipelineState.INSUFFICIENT_DATA
-                        self._current_prediction = {
-                            "upcoming_issue_id": next_period,
-                            "prediction": None,
-                            "confidence": 0,
-                            "status": PipelineState.INSUFFICIENT_DATA.value,
-                            "message": "Unresolved sequence gaps detected — prediction paused",
-                            "server_time_ms": int(time.time() * 1000),
-                        }
-                        self._analyzing_issue = None
-                        return
 
                     # 2. Generate prediction strictly from historical data <= latest_issue_id
                     prediction = await generate_prediction(session, None)

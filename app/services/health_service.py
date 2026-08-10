@@ -8,7 +8,7 @@ from app.models.system_heartbeat import SystemHeartbeat
 from app.models.game_result import GameResult
 from app.models.data_quality import DataQualityEvent
 from app.models.source_request import SourceRequest
-from app.core import get_settings
+from app.core import get_settings, get_build_commit
 from app.core.database import check_db_connection
 
 
@@ -57,7 +57,7 @@ async def get_health(session: AsyncSession) -> dict:
 
     return {
         "status": overall,
-        "build_commit": "522ab13",
+        "build_commit": get_build_commit(),
         "collector": c_status_lower,
         "database": "connected" if db_connected else "disconnected",
         "last_successful_fetch": last_fetch.isoformat() if last_fetch else None,

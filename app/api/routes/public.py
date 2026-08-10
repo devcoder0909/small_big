@@ -141,13 +141,22 @@ async function updateData() {
         document.getElementById('stat-records').textContent = data.total_records_analyzed || '-';
       }
     }
-    // INSUFFICIENT_DATA state
-    else if (status === "INSUFFICIENT_DATA") {
-      document.getElementById('pred-label').textContent = 'PERIOD #---';
-      document.getElementById('pred-text').textContent = 'WAIT';
-      document.getElementById('pred-text').className = 'pred-val wait';
-      document.getElementById('conf-text').textContent = 'Collecting historical records...';
-      document.getElementById('pred-status').innerHTML = '<span class="status-dot waiting"></span>Waiting for data';
+    // Waiting / Stale / Gap / Error diagnostic states
+    else {
+      var waitKey = "wait_" + status + "_" + periodDisplay + "_" + (data.total_records_analyzed || 0);
+      if (waitKey !== lastRenderedKey) {
+        lastRenderedKey = waitKey;
+        document.getElementById('pred-label').textContent = 'PERIOD #' + (periodDisplay !== "---" ? periodDisplay : "---");
+        var pText = (status === "STALE_DATA" || status === "COLLECTOR_STALE") ? 'STALE' : 'WAIT';
+        var predEl = document.getElementById('pred-text');
+        predEl.textContent = pText;
+        predEl.className = 'pred-val wait';
+        var msg = data.message || (data.reason ? data.reason.replace(/_/g, ' ') : 'Collecting historical records...');
+        document.getElementById('conf-text').textContent = msg;
+        document.getElementById('pred-status').innerHTML = '<span class="status-dot waiting"></span>' + (status ? status.replace(/_/g, ' ') : 'Waiting for data');
+        document.getElementById('stat-signals').textContent = '-';
+        document.getElementById('stat-records').textContent = data.total_records_analyzed || '-';
+      }
     }
 
     // Real Game History section (show top 5)

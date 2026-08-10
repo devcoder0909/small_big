@@ -921,60 +921,52 @@ async def generate_prediction(
             "label": "STATISTICAL ANALYSIS — NOT A GUARANTEE",
         }
 
-    # === PRE-PREDICTION DATA GATE: ZERO-MISSING-DATA CONTINUITY & VALIDITY CHECK ===
-    if len(rows) >= 2:
-        for i in range(len(rows) - 1):
-            try:
-                curr_id = int(rows[i].issue_id)
-                prev_id = int(rows[i + 1].issue_id)
-                # Check invalid numbers or sizes
-                if not (0 <= rows[i].result_number <= 9) or rows[i].calculated_size not in ("BIG", "SMALL"):
-                    return {
-                        "upcoming_issue_id": None,
-                        "prediction": None,
-                        "confidence": 0,
-                        "status": "INSUFFICIENT_DATA",
-                        "reason": "HISTORICAL_DATA_GAP",
-                        "message": f"Malformed historical record detected at period #{rows[i].issue_id}",
-                        "total_records_analyzed": len(rows),
-                        "label": "STATISTICAL ANALYSIS — NOT A GUARANTEE",
-                    }
-                # Check continuity gap
-                if curr_id - prev_id != 1:
-                    logger.warning(
-                        "pre_prediction_data_gate_gap_detected",
-                        curr_issue=rows[i].issue_id,
-                        prev_issue=rows[i + 1].issue_id,
-                        gap_count=curr_id - prev_id - 1,
-                    )
-                    # Trigger background recovery asynchronously if possible
-                    try:
-                        from app.services.recovery_service import recover_missing_records
-                        asyncio.create_task(recover_missing_records(session))
-                    except Exception:
-                        pass
+    # === PRE-PREDICTION DATA GATE: CONTINUOUS LATEST VALID SLICE EXTRACTION ===
+    contiguous_rows = []
+    if rows:
+        for i in range(len(rows)):
+            row = rows[i]
+            # Validate row content
+            if not (0 <= row.result_number <= 9) or row.calculated_size not in ("BIG", "SMALL"):
+                break
 
-                    return {
-                        "upcoming_issue_id": None,
-                        "prediction": None,
-                        "confidence": 0,
-                        "status": "INSUFFICIENT_DATA",
-                        "reason": "HISTORICAL_DATA_GAP",
-                        "message": f"Historical data gap detected between period #{prev_id} and #{curr_id}",
-                        "total_records_analyzed": len(rows),
-                        "label": "STATISTICAL ANALYSIS — NOT A GUARANTEE",
-                    }
-            except (ValueError, TypeError):
-                return {
-                    "upcoming_issue_id": None,
-                    "prediction": None,
-                    "confidence": 0,
-                    "status": "INSUFFICIENT_DATA",
-                    "reason": "HISTORICAL_DATA_GAP",
-                    "message": "Malformed issue ID in historical records",
-                    "total_records_analyzed": len(rows),
-                    "label": "STATISTICAL ANALYSIS — NOT A GUARANTEE",
-                }
+            if i > 0:
+                try:
+                    curr_id = int(rows[i - 1].issue_id)
+                    prev_id = int(row.issue_id)
+                    if curr_id - prev_id != 1:
+                        logger.warning(
+                            "pre_prediction_data_gate_gap_detected",
+                            latest_issue=rows[0].issue_id,
+                            gap_after=rows[i - 1].issue_id,
+                            next_available=row.issue_id,
+                            contiguous_count=len(contiguous_rows),
+                        )
+                        # Trigger background recovery asynchronously to fill older missing records
+                        try:
+                            from app.services.recovery_service import recover_missing_records
+                            asyncio.create_task(recover_missing_records(session))
+                        except Exception:
+                            pass
+                        break
+                except (ValueError, TypeError):
+                    break
+
+            contiguous_rows.append(row)
+
+    if len(contiguous_rows) < 5:
+        return {
+            "upcoming_issue_id": str(int(rows[0].issue_id) + 1) if rows else None,
+            "prediction": None,
+            "confidence": 0,
+            "status": "INSUFFICIENT_DATA",
+            "reason": "HISTORICAL_DATA_GAP" if len(rows) >= 5 else "INSUFFICIENT_RECORDS",
+            "message": f"Historical data gap detected (only {len(contiguous_rows)} continuous recent records available)",
+            "total_records_analyzed": len(contiguous_rows),
+            "label": "STATISTICAL ANALYSIS — NOT A GUARANTEE",
+        }
+
+    rows = contiguous_rows
 
     sizes = [row.calculated_size for row in rows]
     numbers = [row.result_number for row in rows]

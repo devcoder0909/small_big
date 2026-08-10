@@ -19,7 +19,7 @@ from typing import Any
 from sqlalchemy import text, select, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core import get_settings
+from app.core import get_settings, get_build_commit
 from app.core.logging import get_logger
 from app.models.game_result import GameResult
 from app.models.engine_prediction import EnginePrediction
@@ -301,7 +301,7 @@ async def generate_production_truth_report(session: AsyncSession) -> dict[str, A
 
     return {
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "build_commit": "522ab13",
+        "build_commit": get_build_commit(),
         "status": verdict_status,
         "vault": vault_metrics,
         "source": source_metrics,

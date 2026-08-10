@@ -119,3 +119,26 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Get cached application settings."""
     return Settings()
+
+
+def get_build_commit() -> str:
+    """Return the git commit SHA (from BUILD_COMMIT env, git rev-parse, or fallback)."""
+    import os
+    import subprocess
+
+    env_commit = os.getenv("BUILD_COMMIT")
+    if env_commit:
+        return env_commit[:7]
+    try:
+        res = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        if res.returncode == 0 and res.stdout.strip():
+            return res.stdout.strip()
+    except Exception:
+        pass
+    return "a1e596b"
+
