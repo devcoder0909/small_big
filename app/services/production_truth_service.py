@@ -168,7 +168,7 @@ async def generate_production_truth_report(session: AsyncSession) -> dict[str, A
     newest_issue_id = newest_res.scalar_one_or_none()
 
     # Chronological Gaps
-    gaps = await detect_gaps(session, window=500)
+    gaps = await detect_gaps(session, window=settings.max_game_results_retention)
 
     # 2. Storage Safety & Alarm
     est_bytes = db_info["database_size_bytes"] or (game_results_count * 3810)
@@ -334,5 +334,11 @@ async def generate_production_truth_report(session: AsyncSession) -> dict[str, A
         },
         "calibration_buckets": calibration_report,
         "baselines": baselines,
+        "analysis": {
+            "window_size": settings.prediction_analysis_window,
+            "max_game_results_retention": settings.max_game_results_retention,
+            "analysis_history_window": settings.analysis_history_window,
+            "game_history_fetch_limit": settings.game_history_fetch_limit,
+        },
         "anti_bluff_note": "Local tests and math strictly verified. Production cloud database access requires live VPC credentials.",
     }

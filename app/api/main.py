@@ -60,6 +60,19 @@ async def lifespan(app: FastAPI):
             await asyncio.sleep(3.0)
 
     asyncio.create_task(_embedded_collector())
+
+    # Startup config diagnostic (no secrets exposed)
+    from app.core.logging import get_logger
+    _boot_logger = get_logger("startup_diagnostic")
+    _boot_logger.info(
+        "vault_config_loaded",
+        MAX_GAME_RESULTS_RETENTION=settings.max_game_results_retention,
+        ANALYSIS_HISTORY_WINDOW=settings.analysis_history_window,
+        GAME_HISTORY_FETCH_LIMIT=settings.game_history_fetch_limit,
+        PREDICTION_ANALYSIS_WINDOW=settings.prediction_analysis_window,
+        AI_PROVIDERS=settings.ai_providers,
+        AI_TIMEOUT_SECONDS=settings.ai_timeout_seconds,
+    )
     yield
 
 

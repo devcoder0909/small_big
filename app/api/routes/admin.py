@@ -27,7 +27,8 @@ async def trigger_recovery(session: AsyncSession = Depends(get_session)):
 @router.get("/data-quality")
 async def data_quality_report(session: AsyncSession = Depends(get_session)):
     """Get data quality report including gaps."""
-    gaps = await detect_gaps(session, window=500)
+    from app.core import get_settings
+    gaps = await detect_gaps(session, window=get_settings().max_game_results_retention)
     return {
         "gaps_detected": len(gaps),
         "gaps": gaps,

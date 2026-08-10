@@ -46,8 +46,6 @@ HTML_PAGE = """<!DOCTYPE html>
     td{padding:6px 0;border-bottom:1px solid #1a1a24;font-family:monospace}
     .tag{display:inline-block;padding:1px 5px;border-radius:3px;font-size:11px;font-weight:700}
     .tag.big{color:#ff4d6a}.tag.small{color:#4da6ff}
-    .win{color:#00d68f;font-weight:700}
-    .loss{color:#ff4d6a;font-weight:700}
     .foot{text-align:center;font-size:9px;color:#444;margin-top:8px}
     .status-dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:4px}
     .status-dot.ready{background:#00d68f}
