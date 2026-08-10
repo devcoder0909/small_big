@@ -381,7 +381,7 @@ async def test_23_restart_recovery_pagination():
     
     mock_session = AsyncMock()
     mock_exec = MagicMock()
-    mock_exec.scalar_one_or_none.return_value = "20260809100051291"
+    mock_exec.scalar_one_or_none.side_effect = ["20260809100051291", None, None]
     mock_session.execute.return_value = mock_exec
 
     fetch_res = FetchResult(

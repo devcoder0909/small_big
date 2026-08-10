@@ -81,23 +81,10 @@ async def recover_missing_records(session: AsyncSession) -> dict:
             seen.add(r.issue_id)
             deduped_valid.append(r)
 
-    # Find records we don't have
-    new_records = []
-    if latest_known:
-        for r in deduped_valid:
-            if r.issue_id > latest_known:
-                new_records.append(r)
-    else:
-        new_records = deduped_valid  # First run — insert all
-
-    if not new_records:
-        logger.info("recovery_no_missing_records")
-        return {"status": "UP_TO_DATE", "recovered": 0}
-
-    # Insert missing records
+    # Upsert all fetched records — upsert_batch idempotently inserts missing records and skips duplicates
     batch_result = await upsert_batch(
         session,
-        new_records,
+        deduped_valid,
         source_url=settings.source_url,
         raw_response_id=None,
         source_created_at=source_time,
@@ -106,16 +93,17 @@ async def recover_missing_records(session: AsyncSession) -> dict:
     logger.info(
         "recovery_complete",
         recovered=batch_result["new_records"],
+        duplicates_skipped=batch_result["duplicates"],
         latest_before=latest_known,
-        latest_after=new_records[0].issue_id if new_records else None,
+        latest_after=deduped_valid[0].issue_id if deduped_valid else None,
     )
 
     return {
-        "status": "RECOVERED",
+        "status": "RECOVERED" if batch_result["new_records"] > 0 else "UP_TO_DATE",
         "recovered": batch_result["new_records"],
         "duplicates_skipped": batch_result["duplicates"],
         "latest_before": latest_known,
-        "latest_after": new_records[0].issue_id if new_records else None,
+        "latest_after": deduped_valid[0].issue_id if deduped_valid else None,
     }
 
 
