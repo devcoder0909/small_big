@@ -57,6 +57,7 @@ async def get_health(session: AsyncSession) -> dict:
 
     return {
         "status": overall,
+        "build_commit": "522ab13",
         "collector": c_status_lower,
         "database": "connected" if db_connected else "disconnected",
         "last_successful_fetch": last_fetch.isoformat() if last_fetch else None,

@@ -301,6 +301,7 @@ async def generate_production_truth_report(session: AsyncSession) -> dict[str, A
 
     return {
         "timestamp": datetime.now(timezone.utc).isoformat(),
+        "build_commit": "522ab13",
         "status": verdict_status,
         "vault": vault_metrics,
         "source": source_metrics,
