@@ -1213,6 +1213,18 @@ async def generate_prediction(
 
     confidence = max(0.500, min(0.920, real_confidence))
 
+    settings = get_settings()
+    min_agreement_pct = getattr(settings, "confluence_min_agreement_pct", 65.0)
+    max_entropy = getattr(settings, "confluence_max_entropy", 0.985)
+    min_agreeing_inds = getattr(settings, "confluence_min_agreeing_indicators", 4)
+
+    agreement_pct_val = round(consensus_ratio * 100, 1)
+    is_high_confluence = (
+        agreement_pct_val >= min_agreement_pct
+        and shannon_entropy <= max_entropy
+        and agreeing >= min_agreeing_inds
+    )
+
     if confidence >= 0.72 and agreeing >= 8:
         edge_level = "HIGH EDGE"
         confidence_level = "HIGH"
@@ -1222,6 +1234,14 @@ async def generate_prediction(
     else:
         edge_level = "LOW EDGE"
         confidence_level = "LOW"
+
+    if is_high_confluence:
+        action_signal = f"PREDICT_{prediction}"
+        edge_recommendation = f"EXECUTE_{prediction}_SIGNAL"
+        confluence_level = "HIGH_CONFLUENCE"
+    else:
+        action_signal = "PASS_WAIT_FOR_CONFLUENCE"
+        edge_recommendation = "PASS_WAIT_FOR_HIGH_EDGE_SIGNAL"
 
     upcoming_issue_id = None
     if latest_issue:
@@ -1246,6 +1266,7 @@ async def generate_prediction(
         "champion_strategy": strategy_used,
         "edge_level": edge_level,
         "confidence": confidence,
+        "action_signal": action_signal,
         "latency_ms": {
             "database_ms": round(database_ms, 2),
             "regime_ms": round(regime_ms, 2),
@@ -1264,6 +1285,9 @@ async def generate_prediction(
         "confidence_level": confidence_level,
         "edge_level": edge_level,
         "confluence_level": confluence_level,
+        "confluence_score": agreement_pct_val,
+        "action_signal": action_signal,
+        "edge_recommendation": edge_recommendation,
         "created_at_ms": now_ms,
         "shannon_entropy": shannon_entropy,
         "z_score": z_score,
@@ -1271,7 +1295,7 @@ async def generate_prediction(
         "strategy_used": strategy_used,
         "selected_window": analysis_window,
         "top_contributing_indicators": top_5_contributors,
-        "agreement_pct": round(consensus_ratio * 100, 1),
+        "agreement_pct": agreement_pct_val,
         "brier_score": brier_score,
         "small_score": round(norm_small, 3),
         "big_score": round(norm_big, 3),

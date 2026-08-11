@@ -94,6 +94,11 @@ class Settings(BaseSettings):
         default=120, alias="HEALTH_DEGRADED_THRESHOLD_SECONDS"
     )
 
+    # Selective High-Confluence Gating Settings
+    confluence_min_agreement_pct: float = Field(default=65.0, alias="CONFLUENCE_MIN_AGREEMENT_PCT")
+    confluence_max_entropy: float = Field(default=0.985, alias="CONFLUENCE_MAX_ENTROPY")
+    confluence_min_agreeing_indicators: int = Field(default=4, alias="CONFLUENCE_MIN_AGREEING_INDICATORS")
+
     # Logging
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     log_format: str = Field(default="json", alias="LOG_FORMAT")
