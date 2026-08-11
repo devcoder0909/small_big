@@ -935,52 +935,28 @@ async def generate_prediction(
             "label": "STATISTICAL ANALYSIS — NOT A GUARANTEE",
         }
 
-    # === PRE-PREDICTION DATA GATE: CONTINUOUS LATEST VALID SLICE EXTRACTION ===
-    contiguous_rows = []
+    # === PRE-PREDICTION DATA GATE: VALID HISTORICAL DATA SLICE EXTRACTION ===
+    valid_rows = []
     if rows:
         for i in range(len(rows)):
             row = rows[i]
             # Validate row content
-            if not (0 <= row.result_number <= 9) or row.calculated_size not in ("BIG", "SMALL"):
-                break
+            if (0 <= getattr(row, "result_number", -1) <= 9) and getattr(row, "calculated_size", None) in ("BIG", "SMALL"):
+                valid_rows.append(row)
 
-            if i > 0:
-                try:
-                    curr_id = int(rows[i - 1].issue_id)
-                    prev_id = int(row.issue_id)
-                    if curr_id - prev_id != 1:
-                        logger.warning(
-                            "pre_prediction_data_gate_gap_detected",
-                            latest_issue=rows[0].issue_id,
-                            gap_after=rows[i - 1].issue_id,
-                            next_available=row.issue_id,
-                            contiguous_count=len(contiguous_rows),
-                        )
-                        # Trigger background recovery asynchronously to fill older missing records
-                        try:
-                            from app.services.recovery_service import recover_missing_records
-                            asyncio.create_task(recover_missing_records(session))
-                        except Exception:
-                            pass
-                        break
-                except (ValueError, TypeError):
-                    break
-
-            contiguous_rows.append(row)
-
-    if len(contiguous_rows) < 5:
+    if len(valid_rows) < 5:
         return {
             "upcoming_issue_id": str(int(rows[0].issue_id) + 1) if rows else None,
             "prediction": None,
             "confidence": 0,
             "status": "INSUFFICIENT_DATA",
-            "reason": "HISTORICAL_DATA_GAP" if len(rows) >= 5 else "INSUFFICIENT_RECORDS",
-            "message": f"Historical data gap detected (only {len(contiguous_rows)} continuous recent records available)",
-            "total_records_analyzed": len(contiguous_rows),
+            "reason": "INSUFFICIENT_RECORDS",
+            "message": f"Need at least 5 valid historical records (only {len(valid_rows)} available)",
+            "total_records_analyzed": len(valid_rows),
             "label": "STATISTICAL ANALYSIS — NOT A GUARANTEE",
         }
 
-    rows = contiguous_rows
+    rows = valid_rows
 
     sizes = [row.calculated_size for row in rows]
     numbers = [row.result_number for row in rows]
