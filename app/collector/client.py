@@ -97,7 +97,11 @@ class SourceClient:
         last_status = None
 
         for endpoint in self.endpoints:
-            params = {"ts": str(ts)}
+            params = {
+                "ts": str(ts),
+                "pageNo": str(page_no),
+                "pageSize": str(page_size),
+            }
 
             for attempt in range(1, self.max_retries + 1):
                 try:
@@ -191,8 +195,9 @@ class SourceClient:
 
         Follows pagination until:
         a) source reports no more records or returns an empty list
-        b) max_records limit is reached
-        c) page safety boundary is reached
+        b) duplicate page detected (source does not support deeper pagination)
+        c) max_records limit is reached
+        d) page safety boundary is reached
 
         Args:
             max_records: Max records to retrieve across all pages (default: 10,000).
@@ -204,21 +209,41 @@ class SourceClient:
         results: list[FetchResult] = []
         total_fetched = 0
         max_pages = (max_records // page_size) + 5
+        seen_issue_ids: set[str] = set()
 
         for page_no in range(1, max_pages + 1):
             fetch_res = await self.fetch_history(page_no=page_no, page_size=page_size)
             if not fetch_res.success or not fetch_res.data:
                 break
 
-            results.append(fetch_res)
-
-            # Extract list count from payload if available
             data_body = fetch_res.data.get("data", {})
             list_data = data_body.get("list", []) if isinstance(data_body, dict) else []
             if not list_data:
                 break
 
+            # Extract issue numbers on this page
+            page_issue_ids = [
+                str(item.get("issueNumber")).strip()
+                for item in list_data
+                if item and item.get("issueNumber")
+            ]
+
+            # Check if all issue IDs on this page have already been seen in previous pages
+            new_ids_count = sum(1 for i_id in page_issue_ids if i_id not in seen_issue_ids)
+            if page_issue_ids and new_ids_count == 0:
+                logger.info(
+                    "fetch_history_complete_duplicate_page_detected",
+                    page_no=page_no,
+                    reason="Source API does not provide deeper pages",
+                )
+                break
+
+            for i_id in page_issue_ids:
+                seen_issue_ids.add(i_id)
+
+            results.append(fetch_res)
             total_fetched += len(list_data)
+
             if total_fetched >= max_records:
                 break
 

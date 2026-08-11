@@ -202,13 +202,18 @@ class CollectorRunner:
             except ValueError:
                 pass
 
-        if has_gap:
-            try:
-                from app.services.recovery_service import recover_missing_records
-                rec_res = await recover_missing_records(session)
-                logger.info("inline_gap_recovery_completed", result=rec_res)
-            except Exception as rec_err:
-                logger.warning("inline_gap_recovery_failed", error=str(rec_err))
+        return has_gap
+
+    async def _trigger_background_recovery(self):
+        """Run recovery asynchronously with a fresh session outside the collector transaction."""
+        try:
+            from app.services.recovery_service import recover_missing_records
+            async with async_session_factory() as session:
+                async with session.begin():
+                    rec_res = await recover_missing_records(session)
+                    logger.info("background_gap_recovery_completed", result=rec_res)
+        except Exception as rec_err:
+            logger.warning("background_gap_recovery_failed", error=str(rec_err))
 
     async def run_single_cycle(self) -> dict:
         """
@@ -223,6 +228,7 @@ class CollectorRunner:
         }
 
         _trigger_issue_id = None  # Captured inside transaction, used after commit
+        _trigger_recovery = False  # Captured inside transaction, triggered after commit
 
         try:
             fetch_result = await self.client.fetch_history()
@@ -284,7 +290,7 @@ class CollectorRunner:
                             issue_id=verr.get("issue_id"),
                         )
 
-                    await self._detect_missing_issues(session, valid_results)
+                    _trigger_recovery = await self._detect_missing_issues(session, valid_results)
 
                     source_time = extract_service_time(fetch_result.data)
                     batch_result = await upsert_batch(
@@ -330,13 +336,16 @@ class CollectorRunner:
                     else:
                         logger.debug("no_new_data")
 
-                # Transaction committed — trigger prediction pipeline immediately
+                # Transaction committed — trigger prediction pipeline & gap recovery asynchronously
                 if _trigger_issue_id:
                     try:
                         from app.services.prediction_pipeline import pipeline
                         asyncio.create_task(pipeline.trigger_new_result(_trigger_issue_id))
                     except Exception as pipe_err:
                         logger.warning("pipeline_trigger_error", error=str(pipe_err))
+
+                if _trigger_recovery:
+                    asyncio.create_task(self._trigger_background_recovery())
 
         except Exception as e:
             logger.error("cycle_error", error=str(e), error_type=type(e).__name__)
