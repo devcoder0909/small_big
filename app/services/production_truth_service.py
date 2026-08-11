@@ -102,14 +102,12 @@ def get_storage_alarm_level(used_bytes: int, quota_bytes: int = 6_000_000_000) -
     }
 
 
-async def generate_production_truth_report(session: AsyncSession) -> dict[str, Any]:
-    """Generate complete production truth verification report."""
-    try:
-        settings = get_settings()
+async def _build_production_truth_report(session: AsyncSession) -> dict[str, Any]:
+    settings = get_settings()
 
-        # Detect DB dialect
-        bind = session.get_bind()
-        dialect_name = getattr(bind.dialect, "name", "sqlite") if bind else "sqlite"
+    # Detect DB dialect
+    bind = session.get_bind()
+    dialect_name = getattr(bind.dialect, "name", "sqlite") if bind else "sqlite"
 
     db_info = {
         "status": "VERIFIED_LOCAL" if dialect_name == "sqlite" else "LIVE_PRODUCTION_VERIFIED",
@@ -345,6 +343,12 @@ async def generate_production_truth_report(session: AsyncSession) -> dict[str, A
         },
         "anti_bluff_note": "Local tests and math strictly verified. Production cloud database access requires live VPC credentials.",
     }
+
+
+async def generate_production_truth_report(session: AsyncSession) -> dict[str, Any]:
+    """Generate complete production truth verification report."""
+    try:
+        return await _build_production_truth_report(session)
     except Exception as exc:
         logger.error("generate_production_truth_report_error", error=str(exc))
         return {

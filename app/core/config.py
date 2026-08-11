@@ -122,13 +122,15 @@ def get_settings() -> Settings:
 
 
 def get_build_commit() -> str:
-    """Return the git commit SHA (from BUILD_COMMIT env, git rev-parse, or fallback)."""
+    """Return the git commit SHA (from commit env vars, git rev-parse, or fallback)."""
     import os
     import subprocess
 
-    env_commit = os.getenv("BUILD_COMMIT")
-    if env_commit:
-        return env_commit[:7]
+    for env_name in ("BUILD_COMMIT", "NF_COMMIT_SHA", "NORTHFLANK_COMMIT_SHA", "COMMIT_SHA", "GIT_COMMIT"):
+        env_commit = os.getenv(env_name, "").strip()
+        if env_commit and not env_commit.startswith("${") and len(env_commit) >= 7:
+            return env_commit[:7]
+
     try:
         res = subprocess.run(
             ["git", "rev-parse", "--short", "HEAD"],
@@ -140,5 +142,6 @@ def get_build_commit() -> str:
             return res.stdout.strip()
     except Exception:
         pass
-    return "45b531b"
+
+    return "3a64a1a"
 

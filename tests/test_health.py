@@ -122,3 +122,19 @@ async def test_get_health_unhealthy_db_disconnected():
 
         assert health["status"] == "unhealthy"
         assert health["database"] == "disconnected"
+
+
+def test_get_build_commit_filters_unexpanded_placeholders():
+    """Verify get_build_commit skips unexpanded template placeholders like '${NF_COMMIT_SHA}'."""
+    from app.core.config import get_build_commit
+    with patch("os.getenv") as mock_env:
+        def fake_getenv(key, default=""):
+            if key == "BUILD_COMMIT":
+                return "${NF_COMMIT_SHA}"
+            if key == "NF_COMMIT_SHA":
+                return "3a64a1a"
+            return default
+        mock_env.side_effect = fake_getenv
+        commit = get_build_commit()
+        assert commit == "3a64a1a"
+
