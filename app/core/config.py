@@ -128,7 +128,12 @@ def get_build_commit() -> str:
 
     for env_name in ("BUILD_COMMIT", "NF_COMMIT_SHA", "NORTHFLANK_COMMIT_SHA", "COMMIT_SHA", "GIT_COMMIT"):
         env_commit = os.getenv(env_name, "").strip()
-        if env_commit and not env_commit.startswith("${") and len(env_commit) >= 7:
+        if (
+            env_commit
+            and not env_commit.startswith("${")
+            and env_commit.upper() not in ("BUILD_COMMIT", "COMMIT_SHA", "GIT_COMMIT", "NF_COMMIT_SHA")
+            and len(env_commit) >= 7
+        ):
             return env_commit[:7]
 
     try:
