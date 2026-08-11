@@ -206,7 +206,8 @@ async def generate_production_truth_report(session: AsyncSession) -> dict[str, A
     calib_bins = {i: {"count": 0, "wins": 0, "confidence_sum": 0.0} for i in range(9)}
 
     for idx, row in enumerate(obs_rows):
-        pred_issue, pred_size, conf, regime, actual_size = row
+        pred_issue, pred_size, conf_raw, regime, actual_size = row
+        conf = float(conf_raw) if conf_raw is not None else 0.50
         is_win = (pred_size == actual_size)
         if is_win:
             wins += 1
