@@ -1253,28 +1253,87 @@ async def generate_prediction(
         edge_level = "LOW EDGE"
         confidence_level = "LOW"
 
-    has_min_sample = len(rows) >= min_sample_size
-    drift_detected = (agreement_pct_val < drift_threshold_pct)
+    # === POPULATION B: TRUE HISTORICAL OOS MODEL-HEALTH EVALUATION ===
+    # Join immutable past engine predictions with actual observed outcomes
+    eval_stmt = (
+        select(
+            EnginePrediction.issue_id,
+            EnginePrediction.predicted_size,
+            EnginePrediction.confidence,
+            GameResult.calculated_size,
+        )
+        .join(GameResult, EnginePrediction.issue_id == GameResult.issue_id)
+        .order_by(desc(EnginePrediction.issue_id))
+        .limit(1000)
+    )
+    eval_rows = []
+    try:
+        eval_res = await session.execute(eval_stmt)
+        eval_rows = eval_res.fetchall()
+    except Exception as eval_err:
+        logger.warning("historical_model_health_query_failed", error=str(eval_err))
 
-    if not has_min_sample:
+    evaluated_prediction_count = len(eval_rows)
+    correct_prediction_count = 0
+    incorrect_prediction_count = 0
+    brier_sum = 0.0
+
+    for e_row in eval_rows:
+        _, p_size, p_conf_raw, actual_size = e_row
+        p_conf = float(p_conf_raw) if p_conf_raw is not None else 0.50
+        is_correct = (p_size == actual_size)
+        if is_correct:
+            correct_prediction_count += 1
+        else:
+            incorrect_prediction_count += 1
+
+        p_correct = p_conf if is_correct else (1.0 - p_conf)
+        brier_sum += (1.0 - p_correct) ** 2
+
+    historical_rolling_accuracy = (
+        round((correct_prediction_count / evaluated_prediction_count) * 100.0, 2)
+        if evaluated_prediction_count > 0
+        else 0.0
+    )
+    historical_rolling_brier = (
+        round(brier_sum / evaluated_prediction_count, 4)
+        if evaluated_prediction_count > 0
+        else 0.50
+    )
+    hist_ci_lower, hist_ci_upper = _calculate_wilson_ci(
+        correct_prediction_count, evaluated_prediction_count
+    )
+
+    has_min_sample = evaluated_prediction_count >= min_sample_size
+    drift_detected = (
+        has_min_sample and historical_rolling_accuracy < drift_threshold_pct
+    )
+
+    if evaluated_prediction_count == 0:
+        health_status = "NO_EVALUATED_PREDICTIONS"
+        health_reason = "Zero completed out-of-sample predictions available for evaluation"
+        confluence_level = "NO_EVALUATED_PREDICTIONS"
+        action_signal = "PASS_WAIT_FOR_CONFLUENCE"
+        edge_recommendation = "PASS_WAIT_FOR_HISTORICAL_EVALUATION_SAMPLE"
+    elif not has_min_sample:
         confluence_level = "INSUFFICIENT_SAMPLE"
         action_signal = "PASS_WAIT_FOR_CONFLUENCE"
         edge_recommendation = "PASS_WAIT_FOR_MINIMUM_SAMPLE_VALIDATION"
         health_status = "INSUFFICIENT_SAMPLE"
-        health_reason = f"Sample size ({len(rows)}) is below minimum safety threshold ({min_sample_size})"
+        health_reason = f"Evaluated prediction sample size ({evaluated_prediction_count}) is below minimum threshold ({min_sample_size})"
     elif drift_detected:
         confluence_level = "LOW_CONFLUENCE"
         action_signal = "PASS_WAIT_FOR_CONFLUENCE"
         edge_recommendation = "PASS_WAIT_FOR_MODEL_CALIBRATION_RECOVERY"
         edge_level = "LOW EDGE"
         health_status = "DEGRADED"
-        health_reason = f"Rolling agreement ({agreement_pct_val}%) is below drift threshold ({drift_threshold_pct}%)"
+        health_reason = f"Historical rolling accuracy ({historical_rolling_accuracy}%) is below drift threshold ({drift_threshold_pct}%)"
     elif is_high_confluence:
         action_signal = f"PREDICT_{prediction}"
         edge_recommendation = f"EXECUTE_{prediction}_SIGNAL"
         confluence_level = "HIGH_CONFLUENCE"
         health_status = "HEALTHY"
-        health_reason = "Model indicators and entropy are in calibrated alignment"
+        health_reason = "Historical out-of-sample predictions and current entropy are in calibrated alignment"
     else:
         action_signal = "PASS_WAIT_FOR_CONFLUENCE"
         edge_recommendation = "PASS_WAIT_FOR_HIGH_EDGE_SIGNAL"
@@ -1292,9 +1351,9 @@ async def generate_prediction(
     t_end_total = time.monotonic()
     total_ms = (t_end_total - t_start_total) * 1000.0
 
-    # Compute Brier score metric against latest history sample
-    brier_score = round((1.0 - raw_prob) ** 2, 4)
+    current_prediction_brier = round((1.0 - raw_prob) ** 2, 4)
 
+    # === POPULATION A: CURRENT FRAME INDICATOR CONFLUENCE ===
     indicator_confluence = {
         "active_indicators": active_indicators,
         "agreeing_indicators": agreeing,
@@ -1302,17 +1361,19 @@ async def generate_prediction(
         "consensus_wilson_ci": [ci_lower, ci_upper],
     }
 
+    # === POPULATION B: HISTORICAL OOS MODEL HEALTH ===
     model_health = {
         "status": health_status,
         "historical_draw_sample_size": len(rows),
-        "min_required_sample_size": min_sample_size,
-        "active_indicator_agreement_count": agreeing,
-        "total_active_indicators": active_indicators,
-        "indicator_consensus_pct": agreement_pct_val,
-        "rolling_brier": brier_score,
-        "confidence_interval": [ci_lower, ci_upper],
-        "coverage_rate": agreement_pct_val,
+        "evaluated_prediction_count": evaluated_prediction_count,
+        "correct_prediction_count": correct_prediction_count,
+        "incorrect_prediction_count": incorrect_prediction_count,
+        "historical_rolling_accuracy": historical_rolling_accuracy,
+        "historical_rolling_brier": historical_rolling_brier,
+        "historical_coverage_rate": agreement_pct_val,
+        "historical_wilson_ci": [hist_ci_lower, hist_ci_upper],
         "drift_detected": drift_detected,
+        "min_required_sample_size": min_sample_size,
         "reason": health_reason,
     }
 
@@ -1359,7 +1420,9 @@ async def generate_prediction(
         "selected_window": analysis_window,
         "top_contributing_indicators": top_5_contributors,
         "agreement_pct": agreement_pct_val,
-        "brier_score": brier_score,
+        "current_prediction_brier": current_prediction_brier,
+        "historical_rolling_brier": historical_rolling_brier,
+        "brier_score": historical_rolling_brier,
         "small_score": round(norm_small, 3),
         "big_score": round(norm_big, 3),
         "active_indicators": active_indicators,
