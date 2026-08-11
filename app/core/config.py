@@ -98,6 +98,9 @@ class Settings(BaseSettings):
     confluence_min_agreement_pct: float = Field(default=65.0, alias="CONFLUENCE_MIN_AGREEMENT_PCT")
     confluence_max_entropy: float = Field(default=0.985, alias="CONFLUENCE_MAX_ENTROPY")
     confluence_min_agreeing_indicators: int = Field(default=4, alias="CONFLUENCE_MIN_AGREEING_INDICATORS")
+    confluence_min_sample_size: int = Field(default=20, alias="CONFLUENCE_MIN_SAMPLE_SIZE")
+    prediction_health_drift_threshold_pct: float = Field(default=55.0, alias="PREDICTION_HEALTH_DRIFT_THRESHOLD_PCT")
+    prediction_health_recovery_threshold_pct: float = Field(default=58.0, alias="PREDICTION_HEALTH_RECOVERY_THRESHOLD_PCT")
 
     # Logging
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")

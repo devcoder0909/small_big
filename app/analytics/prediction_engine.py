@@ -94,6 +94,20 @@ def _calculate_z_score(sizes: list[str]) -> tuple[float, float]:
     return round(z, 3), round(small_count / n, 4)
 
 
+def _calculate_wilson_ci(wins: int, n: int) -> tuple[float, float]:
+    """Calculate 95% Wilson Score Interval for binomial proportion."""
+    if n <= 0:
+        return 0.0, 0.0
+    p = wins / n
+    z = 1.96
+    denom = 1 + z**2 / n
+    center = (p + z**2 / (2 * n)) / denom
+    spread = (z * math.sqrt((p * (1 - p) + z**2 / (4 * n)) / n)) / denom
+    lower = max(0.0, round((center - spread) * 100, 2))
+    upper = min(100.0, round((center + spread) * 100, 2))
+    return lower, upper
+
+
 def _analyze_streak_indicator(sizes: list[str]) -> dict:
     """
     Empirical streak analysis.
@@ -1217,8 +1231,12 @@ async def generate_prediction(
     min_agreement_pct = getattr(settings, "confluence_min_agreement_pct", 65.0)
     max_entropy = getattr(settings, "confluence_max_entropy", 0.985)
     min_agreeing_inds = getattr(settings, "confluence_min_agreeing_indicators", 4)
+    min_sample_size = getattr(settings, "confluence_min_sample_size", 20)
+    drift_threshold_pct = getattr(settings, "prediction_health_drift_threshold_pct", 55.0)
 
     agreement_pct_val = round(consensus_ratio * 100, 1)
+    ci_lower, ci_upper = _calculate_wilson_ci(agreeing, max(1, active_indicators))
+
     is_high_confluence = (
         agreement_pct_val >= min_agreement_pct
         and shannon_entropy <= max_entropy
@@ -1235,13 +1253,33 @@ async def generate_prediction(
         edge_level = "LOW EDGE"
         confidence_level = "LOW"
 
-    if is_high_confluence:
+    has_min_sample = len(rows) >= min_sample_size
+    drift_detected = (agreement_pct_val < drift_threshold_pct)
+
+    if not has_min_sample:
+        confluence_level = "INSUFFICIENT_SAMPLE"
+        action_signal = "PASS_WAIT_FOR_CONFLUENCE"
+        edge_recommendation = "PASS_WAIT_FOR_MINIMUM_SAMPLE_VALIDATION"
+        health_status = "INSUFFICIENT_SAMPLE"
+        health_reason = f"Sample size ({len(rows)}) is below minimum safety threshold ({min_sample_size})"
+    elif drift_detected:
+        confluence_level = "LOW_CONFLUENCE"
+        action_signal = "PASS_WAIT_FOR_CONFLUENCE"
+        edge_recommendation = "PASS_WAIT_FOR_MODEL_CALIBRATION_RECOVERY"
+        edge_level = "LOW EDGE"
+        health_status = "DEGRADED"
+        health_reason = f"Rolling agreement ({agreement_pct_val}%) is below drift threshold ({drift_threshold_pct}%)"
+    elif is_high_confluence:
         action_signal = f"PREDICT_{prediction}"
         edge_recommendation = f"EXECUTE_{prediction}_SIGNAL"
         confluence_level = "HIGH_CONFLUENCE"
+        health_status = "HEALTHY"
+        health_reason = "Model indicators and entropy are in calibrated alignment"
     else:
         action_signal = "PASS_WAIT_FOR_CONFLUENCE"
         edge_recommendation = "PASS_WAIT_FOR_HIGH_EDGE_SIGNAL"
+        health_status = "HEALTHY"
+        health_reason = "Confluence below high edge threshold; abstaining safely"
 
     upcoming_issue_id = None
     if latest_issue:
@@ -1257,6 +1295,18 @@ async def generate_prediction(
     # Compute Brier score metric against latest history sample
     brier_score = round((1.0 - raw_prob) ** 2, 4)
 
+    model_health = {
+        "status": health_status,
+        "active_sample_count": agreeing,
+        "total_indicators": active_indicators,
+        "rolling_accuracy": agreement_pct_val,
+        "rolling_brier": brier_score,
+        "confidence_interval": [ci_lower, ci_upper],
+        "coverage_rate": agreement_pct_val,
+        "drift_detected": drift_detected,
+        "reason": health_reason,
+    }
+
     telemetry = {
         "latest_confirmed_period": latest_issue,
         "target_period": upcoming_issue_id,
@@ -1267,6 +1317,7 @@ async def generate_prediction(
         "edge_level": edge_level,
         "confidence": confidence,
         "action_signal": action_signal,
+        "model_health": model_health,
         "latency_ms": {
             "database_ms": round(database_ms, 2),
             "regime_ms": round(regime_ms, 2),
@@ -1288,6 +1339,7 @@ async def generate_prediction(
         "confluence_score": agreement_pct_val,
         "action_signal": action_signal,
         "edge_recommendation": edge_recommendation,
+        "model_health": model_health,
         "created_at_ms": now_ms,
         "shannon_entropy": shannon_entropy,
         "z_score": z_score,
