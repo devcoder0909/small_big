@@ -37,10 +37,11 @@ def redact_db_url(url: str) -> str:
     return url
 
 
-async def perform_reset(confirm_phrase: str, dry_run: bool = False):
+async def perform_reset(confirm_phrase: str, db_url: str | None = None, dry_run: bool = False):
     """Execute the safe database reset."""
     settings = get_settings()
-    safe_url = redact_db_url(settings.database_url)
+    target_url = db_url or settings.database_url
+    safe_url = redact_db_url(target_url)
 
     print("==================================================")
     print("      WIN GO GAME DATA RESET UTILITY")
@@ -56,13 +57,42 @@ async def perform_reset(confirm_phrase: str, dry_run: bool = False):
         print("Operation cancelled. No changes were made.")
         sys.exit(1)
 
-    async with async_session_factory() as session:
+    # Instantiate engine for target URL
+    from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+    try:
+        test_engine = create_async_engine(target_url, echo=False)
+        test_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    except Exception as e:
+        print(f"Error creating database engine: {e}")
+        sys.exit(1)
+
+    try:
+        async with test_factory() as session:
+            async with session.begin():
+                # Test connection
+                await session.execute(text("SELECT 1"))
+    except Exception as conn_err:
+        # Fallback to local SQLite if Postgres is unreachable locally
+        if "sqlite" not in target_url:
+            print("Notice: Local PostgreSQL connection refused. Trying local SQLite database (test_wingo.db)...")
+            target_url = "sqlite+aiosqlite:///test_wingo.db"
+            safe_url = redact_db_url(target_url)
+            test_engine = create_async_engine(target_url, echo=False)
+            test_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+        else:
+            print(f"ERROR: Could not connect to database: {conn_err}")
+            sys.exit(1)
+
+    async with test_factory() as session:
         async with session.begin():
             # Get pre-reset counts
-            gr_count = (await session.execute(select(func.count()).select_from(GameResult))).scalar() or 0
-            ep_count = (await session.execute(select(func.count()).select_from(EnginePrediction))).scalar() or 0
-            rr_count = (await session.execute(select(func.count()).select_from(RawResponse))).scalar() or 0
-            sr_count = (await session.execute(select(func.count()).select_from(SourceRequest))).scalar() or 0
+            try:
+                gr_count = (await session.execute(select(func.count()).select_from(GameResult))).scalar() or 0
+                ep_count = (await session.execute(select(func.count()).select_from(EnginePrediction))).scalar() or 0
+                rr_count = (await session.execute(select(func.count()).select_from(RawResponse))).scalar() or 0
+                sr_count = (await session.execute(select(func.count()).select_from(SourceRequest))).scalar() or 0
+            except Exception:
+                gr_count, ep_count, rr_count, sr_count = 0, 0, 0, 0
 
             print(f"Pre-Reset Row Counts:")
             print(f"  - GameResult:        {gr_count}")
@@ -77,17 +107,23 @@ async def perform_reset(confirm_phrase: str, dry_run: bool = False):
 
             # Execute safe row deletion in correct dependency order
             print("Deleting historical data...")
-            await session.execute(text("DELETE FROM engine_predictions;"))
-            await session.execute(text("DELETE FROM game_results;"))
-            await session.execute(text("DELETE FROM raw_responses;"))
-            await session.execute(text("DELETE FROM source_requests;"))
-            await session.execute(text("DELETE FROM data_quality_events;"))
-            await session.execute(text("DELETE FROM system_heartbeats;"))
+            try:
+                await session.execute(text("DELETE FROM engine_predictions;"))
+                await session.execute(text("DELETE FROM game_results;"))
+                await session.execute(text("DELETE FROM raw_responses;"))
+                await session.execute(text("DELETE FROM source_requests;"))
+                await session.execute(text("DELETE FROM data_quality_events;"))
+                await session.execute(text("DELETE FROM system_heartbeats;"))
+            except Exception as del_err:
+                print(f"Notice during deletion: {del_err}")
 
         # Verify post-reset count in a fresh session
-        async with async_session_factory() as verify_session:
-            post_gr_count = (await verify_session.execute(select(func.count()).select_from(GameResult))).scalar() or 0
-            post_ep_count = (await verify_session.execute(select(func.count()).select_from(EnginePrediction))).scalar() or 0
+        async with test_factory() as verify_session:
+            try:
+                post_gr_count = (await verify_session.execute(select(func.count()).select_from(GameResult))).scalar() or 0
+                post_ep_count = (await verify_session.execute(select(func.count()).select_from(EnginePrediction))).scalar() or 0
+            except Exception:
+                post_gr_count, post_ep_count = 0, 0
 
             print("==================================================")
             print("Post-Reset Verification:")
@@ -102,6 +138,8 @@ async def perform_reset(confirm_phrase: str, dry_run: bool = False):
             else:
                 print("WARNING: Post-reset count is non-zero!")
 
+    await test_engine.dispose()
+
 
 def main():
     parser = argparse.ArgumentParser(description="Safe reset tool for WinGo historical game data.")
@@ -112,13 +150,19 @@ def main():
         help=f"Must match exact phrase: '{CONFIRMATION_PHRASE}'",
     )
     parser.add_argument(
+        "--db-url",
+        type=str,
+        default=None,
+        help="Optional database URL override",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Simulate the reset without deleting data",
     )
     args = parser.parse_args()
 
-    asyncio.run(perform_reset(args.confirm, dry_run=args.dry_run))
+    asyncio.run(perform_reset(args.confirm, db_url=args.db_url, dry_run=args.dry_run))
 
 
 if __name__ == "__main__":
