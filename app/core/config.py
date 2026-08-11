@@ -156,5 +156,5 @@ def get_build_commit() -> str:
     except Exception:
         pass
 
-    return "3a64a1a"
+    return "7d27e26"
 

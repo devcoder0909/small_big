@@ -63,9 +63,10 @@ HTML_PAGE = """<!DOCTYPE html>
     <div class="sub" id="pred-status" style="margin-top:6px;font-size:10px;color:#555"></div>
   </div>
 
-  <div class="grid">
+  <div class="grid" style="grid-template-columns: 1fr 1fr 1fr;">
     <div class="g-box"><div class="g-val gold" id="stat-signals">-</div><div class="g-lbl">Active Signals</div></div>
-    <div class="g-box" style="grid-column: span 2"><div class="g-val blue" id="stat-records">-</div><div class="g-lbl">Records Analyzed</div></div>
+    <div class="g-box"><div class="g-val blue" id="stat-records">-</div><div class="g-lbl">Historical Records</div></div>
+    <div class="g-box"><div class="g-val green" id="stat-window">-</div><div class="g-lbl">Active Window</div></div>
   </div>
 
   <div class="box">
@@ -115,6 +116,7 @@ async function updateData() {
         document.getElementById('pred-status').innerHTML = '<span class="status-dot analyzing"></span>Generating prediction';
         document.getElementById('stat-signals').textContent = '-';
         document.getElementById('stat-records').textContent = '-';
+        document.getElementById('stat-window').textContent = '-';
       }
     }
     // READY / ACTIVE state — prediction locked and available
@@ -138,7 +140,8 @@ async function updateData() {
         document.getElementById('conf-text').innerHTML = 'Confidence: <b>' + confPct + '%</b> — <span class="badge ' + badgeClass + '">' + level + '</span>';
         document.getElementById('pred-status').innerHTML = '<span class="status-dot ready"></span>Prediction Ready';
         document.getElementById('stat-signals').textContent = (data.agreeing_indicators || '-') + '/' + (data.active_indicators || '-');
-        document.getElementById('stat-records').textContent = data.total_records_analyzed || '-';
+        document.getElementById('stat-records').textContent = (data.database_record_count || data.total_records_analyzed || '-').toLocaleString();
+        document.getElementById('stat-window').textContent = (data.selected_window || data.feature_window_selected || '-') + ' draws';
       }
     }
     // Waiting / Stale / Gap / Error diagnostic states
@@ -155,7 +158,8 @@ async function updateData() {
         document.getElementById('conf-text').textContent = msg;
         document.getElementById('pred-status').innerHTML = '<span class="status-dot waiting"></span>' + (status ? status.replace(/_/g, ' ') : 'Waiting for data');
         document.getElementById('stat-signals').textContent = '-';
-        document.getElementById('stat-records').textContent = data.total_records_analyzed || '-';
+        document.getElementById('stat-records').textContent = (data.database_record_count || data.total_records_analyzed || '-').toLocaleString();
+        document.getElementById('stat-window').textContent = (data.selected_window || data.feature_window_selected || '-') + ' draws';
       }
     }
 
