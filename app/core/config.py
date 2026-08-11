@@ -140,5 +140,5 @@ def get_build_commit() -> str:
             return res.stdout.strip()
     except Exception:
         pass
-    return "a1e596b"
+    return "45b531b"
 
