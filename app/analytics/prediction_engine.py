@@ -1290,23 +1290,29 @@ async def generate_prediction(
         p_correct = p_conf if is_correct else (1.0 - p_conf)
         brier_sum += (1.0 - p_correct) ** 2
 
-    historical_rolling_accuracy = (
-        round((correct_prediction_count / evaluated_prediction_count) * 100.0, 2)
-        if evaluated_prediction_count > 0
-        else 0.0
-    )
-    historical_rolling_brier = (
-        round(brier_sum / evaluated_prediction_count, 4)
-        if evaluated_prediction_count > 0
-        else 0.50
-    )
-    hist_ci_lower, hist_ci_upper = _calculate_wilson_ci(
-        correct_prediction_count, evaluated_prediction_count
-    )
+    if evaluated_prediction_count > 0:
+        historical_rolling_accuracy = round(
+            (correct_prediction_count / evaluated_prediction_count) * 100.0, 2
+        )
+        historical_rolling_brier = round(brier_sum / evaluated_prediction_count, 4)
+        hist_ci_lower, hist_ci_upper = _calculate_wilson_ci(
+            correct_prediction_count, evaluated_prediction_count
+        )
+        historical_wilson_ci = [hist_ci_lower, hist_ci_upper]
+        historical_coverage_rate = round(
+            (evaluated_prediction_count / max(1, len(rows))) * 100.0, 2
+        )
+    else:
+        historical_rolling_accuracy = None
+        historical_rolling_brier = None
+        historical_wilson_ci = None
+        historical_coverage_rate = None
 
     has_min_sample = evaluated_prediction_count >= min_sample_size
     drift_detected = (
-        has_min_sample and historical_rolling_accuracy < drift_threshold_pct
+        has_min_sample
+        and historical_rolling_accuracy is not None
+        and historical_rolling_accuracy < drift_threshold_pct
     )
 
     if evaluated_prediction_count == 0:
@@ -1370,8 +1376,8 @@ async def generate_prediction(
         "incorrect_prediction_count": incorrect_prediction_count,
         "historical_rolling_accuracy": historical_rolling_accuracy,
         "historical_rolling_brier": historical_rolling_brier,
-        "historical_coverage_rate": agreement_pct_val,
-        "historical_wilson_ci": [hist_ci_lower, hist_ci_upper],
+        "historical_coverage_rate": historical_coverage_rate,
+        "historical_wilson_ci": historical_wilson_ci,
         "drift_detected": drift_detected,
         "min_required_sample_size": min_sample_size,
         "reason": health_reason,
