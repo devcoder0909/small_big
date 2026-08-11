@@ -73,11 +73,23 @@ async def test_model_health_object_structure():
 
     res = await generate_prediction(mock_session, window=100)
 
+    assert "indicator_confluence" in res
+    confluence = res["indicator_confluence"]
+    assert "active_indicators" in confluence
+    assert "agreeing_indicators" in confluence
+    assert "consensus_pct" in confluence
+
     assert "model_health" in res
     health = res["model_health"]
     assert "status" in health
-    assert "active_sample_count" in health
-    assert "rolling_accuracy" in health
+    assert "historical_draw_sample_size" in health
+    assert health["historical_draw_sample_size"] == 30
+    assert "min_required_sample_size" in health
+    assert "indicator_consensus_pct" in health
+    assert "rolling_brier" in health
+    assert "confidence_interval" in health
+    assert "drift_detected" in health
+    assert "reason" in health
     assert "rolling_brier" in health
     assert "confidence_interval" in health
     assert "drift_detected" in health

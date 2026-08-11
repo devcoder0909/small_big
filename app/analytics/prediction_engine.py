@@ -1295,11 +1295,20 @@ async def generate_prediction(
     # Compute Brier score metric against latest history sample
     brier_score = round((1.0 - raw_prob) ** 2, 4)
 
+    indicator_confluence = {
+        "active_indicators": active_indicators,
+        "agreeing_indicators": agreeing,
+        "consensus_pct": agreement_pct_val,
+        "consensus_wilson_ci": [ci_lower, ci_upper],
+    }
+
     model_health = {
         "status": health_status,
-        "active_sample_count": agreeing,
-        "total_indicators": active_indicators,
-        "rolling_accuracy": agreement_pct_val,
+        "historical_draw_sample_size": len(rows),
+        "min_required_sample_size": min_sample_size,
+        "active_indicator_agreement_count": agreeing,
+        "total_active_indicators": active_indicators,
+        "indicator_consensus_pct": agreement_pct_val,
         "rolling_brier": brier_score,
         "confidence_interval": [ci_lower, ci_upper],
         "coverage_rate": agreement_pct_val,
@@ -1317,6 +1326,7 @@ async def generate_prediction(
         "edge_level": edge_level,
         "confidence": confidence,
         "action_signal": action_signal,
+        "indicator_confluence": indicator_confluence,
         "model_health": model_health,
         "latency_ms": {
             "database_ms": round(database_ms, 2),
@@ -1339,6 +1349,7 @@ async def generate_prediction(
         "confluence_score": agreement_pct_val,
         "action_signal": action_signal,
         "edge_recommendation": edge_recommendation,
+        "indicator_confluence": indicator_confluence,
         "model_health": model_health,
         "created_at_ms": now_ms,
         "shannon_entropy": shannon_entropy,
