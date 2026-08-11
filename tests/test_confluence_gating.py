@@ -18,21 +18,21 @@ async def test_high_confluence_gate_triggers_predict_signal():
     """Verify high agreement and low entropy trigger PREDICT action signal."""
     mock_session = AsyncMock()
 
-    # Mock 100 historical draws
+    # Mock 100 historical draws (ordered descending from newest to oldest)
     mock_rows = []
     for i in range(100):
         mock_r = MagicMock()
-        mock_r.issue_id = str(20260811100050000 + i)
+        mock_r.issue_id = str(20260811100050000 + (99 - i))
         mock_r.calculated_size = "BIG" if i % 2 == 0 else "SMALL"
         mock_r.result_number = (i % 5) * 2
         mock_r.source_color = "red"
         mock_rows.append(mock_r)
 
     mock_res = MagicMock()
-    mock_res.scalars().all.return_value = mock_rows
+    mock_res.fetchall.return_value = mock_rows
     mock_session.execute.return_value = mock_res
 
-    res = await generate_prediction(mock_session, analysis_window=100)
+    res = await generate_prediction(mock_session, window=100)
 
     assert res is not None
     assert "action_signal" in res
@@ -50,17 +50,17 @@ async def test_target_period_strictly_n_plus_one():
     mock_rows = []
     for i in range(10):
         mock_r = MagicMock()
-        mock_r.issue_id = str(20260811100052000 + i)
+        mock_r.issue_id = str(20260811100052000 + (9 - i))
         mock_r.calculated_size = "BIG"
         mock_r.result_number = 7
         mock_r.source_color = "green"
         mock_rows.append(mock_r)
 
     mock_res = MagicMock()
-    mock_res.scalars().all.return_value = mock_rows
+    mock_res.fetchall.return_value = mock_rows
     mock_session.execute.return_value = mock_res
 
-    res = await generate_prediction(mock_session, analysis_window=10)
+    res = await generate_prediction(mock_session, window=10)
 
     latest_confirmed = res["telemetry"]["latest_confirmed_period"]
     upcoming = res["upcoming_issue_id"]
