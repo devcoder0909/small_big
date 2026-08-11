@@ -166,17 +166,26 @@ async def test_ai_rotator_timeout_fallback():
     sizes = ["BIG", "SMALL"] * 10
     stat_summary = {"entropy": 0.95}
 
+    import app.analytics.ai_rotator as ai_rotator_module
+    ai_rotator_module._ai_cache = None
     _key_cooldowns.clear()
 
-    mock_settings = MagicMock()
-    mock_settings.nvidia_api_key = "fake_nvidia_1"
-    mock_settings.openrouter_api_key = ""
-    mock_settings.groq_api_key = ""
-    mock_settings.gemini_api_key = ""
-    mock_settings.ai_providers = "nvidia"
-    mock_settings.ai_timeout_seconds = 0.1
+    from app.core.config import Settings
+    test_settings = Settings(
+        NVIDIA_API_KEY="fake_nvidia_1",
+        NVIDIA_API_KEY_2="",
+        OPENROUTER_API_KEY="",
+        OPENROUTER_API_KEY_2="",
+        OPENROUTER_API_KEY_3="",
+        GROQ_API_KEY="",
+        GROQ_API_KEY_2="",
+        GEMINI_API_KEY="",
+        GEMINI_API_KEY_2="",
+        AI_PROVIDERS="nvidia",
+        AI_TIMEOUT_SECONDS=0.1,
+    )
 
-    with patch("app.analytics.ai_rotator.get_settings", return_value=mock_settings), \
+    with patch("app.analytics.ai_rotator.get_settings", return_value=test_settings), \
          patch("httpx.AsyncClient.post", side_effect=httpx.TimeoutException("Timeout")):
         result = await fetch_ai_prediction(sizes, stat_summary)
 

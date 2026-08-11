@@ -503,6 +503,14 @@ async def test_29_complete_scraper_pagination():
     fetch2 = FetchResult(
         success=True,
         status_code=200,
+        data={"data": {"list": [{"issueNumber": "101"}]}},
+        response_time_ms=10,
+        request_timestamp_ms=1000,
+        requested_at=datetime.now(timezone.utc),
+    )
+    fetch3 = FetchResult(
+        success=True,
+        status_code=200,
         data={"data": {"list": []}},
         response_time_ms=10,
         request_timestamp_ms=1000,
@@ -510,7 +518,7 @@ async def test_29_complete_scraper_pagination():
     )
 
     with patch.object(client, "fetch_history", new_callable=AsyncMock) as mock_fetch:
-        mock_fetch.side_effect = [fetch1, fetch2]
+        mock_fetch.side_effect = [fetch1, fetch2, fetch3]
         res = await client.fetch_history_complete(max_records=100, page_size=50)
         assert len(res) == 2
 
