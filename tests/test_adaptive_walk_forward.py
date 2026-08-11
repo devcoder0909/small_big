@@ -47,7 +47,7 @@ async def test_adaptive_walk_forward_simulation():
             pred_size = pred.get("prediction")
             selected_win = pred.get("selected_window", 1000)
             regime = pred.get("regime", "STABLE_NEUTRAL")
-            brier = pred.get("brier_score", 0.25)
+            brier = pred.get("current_prediction_brier") or 0.25
             is_win = (actual_size == pred_size)
 
             adaptive_window_selector.record_window_result(selected_win, regime, is_win, brier)

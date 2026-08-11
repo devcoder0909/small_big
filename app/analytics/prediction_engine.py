@@ -1308,9 +1308,10 @@ async def generate_prediction(
         historical_wilson_ci = None
         historical_coverage_rate = None
 
-    has_min_sample = evaluated_prediction_count >= min_sample_size
+    has_min_draw_sample = len(rows) >= min_sample_size
+    has_min_eval_sample = evaluated_prediction_count >= min_sample_size
     drift_detected = (
-        has_min_sample
+        has_min_eval_sample
         and historical_rolling_accuracy is not None
         and historical_rolling_accuracy < drift_threshold_pct
     )
@@ -1318,33 +1319,33 @@ async def generate_prediction(
     if evaluated_prediction_count == 0:
         health_status = "NO_EVALUATED_PREDICTIONS"
         health_reason = "Zero completed out-of-sample predictions available for evaluation"
-        confluence_level = "NO_EVALUATED_PREDICTIONS"
-        action_signal = "PASS_WAIT_FOR_CONFLUENCE"
-        edge_recommendation = "PASS_WAIT_FOR_HISTORICAL_EVALUATION_SAMPLE"
-    elif not has_min_sample:
+    elif not has_min_eval_sample:
+        health_status = "INSUFFICIENT_SAMPLE"
+        health_reason = f"Evaluated prediction sample size ({evaluated_prediction_count}) is below minimum threshold ({min_sample_size})"
+    elif drift_detected:
+        health_status = "DEGRADED"
+        health_reason = f"Historical rolling accuracy ({historical_rolling_accuracy}%) is below drift threshold ({drift_threshold_pct}%)"
+    else:
+        health_status = "HEALTHY"
+        health_reason = "Historical out-of-sample predictions and current entropy are in calibrated alignment"
+
+    if not has_min_draw_sample:
         confluence_level = "INSUFFICIENT_SAMPLE"
         action_signal = "PASS_WAIT_FOR_CONFLUENCE"
         edge_recommendation = "PASS_WAIT_FOR_MINIMUM_SAMPLE_VALIDATION"
-        health_status = "INSUFFICIENT_SAMPLE"
-        health_reason = f"Evaluated prediction sample size ({evaluated_prediction_count}) is below minimum threshold ({min_sample_size})"
     elif drift_detected:
         confluence_level = "LOW_CONFLUENCE"
         action_signal = "PASS_WAIT_FOR_CONFLUENCE"
         edge_recommendation = "PASS_WAIT_FOR_MODEL_CALIBRATION_RECOVERY"
         edge_level = "LOW EDGE"
-        health_status = "DEGRADED"
-        health_reason = f"Historical rolling accuracy ({historical_rolling_accuracy}%) is below drift threshold ({drift_threshold_pct}%)"
     elif is_high_confluence:
         action_signal = f"PREDICT_{prediction}"
         edge_recommendation = f"EXECUTE_{prediction}_SIGNAL"
         confluence_level = "HIGH_CONFLUENCE"
-        health_status = "HEALTHY"
-        health_reason = "Historical out-of-sample predictions and current entropy are in calibrated alignment"
     else:
+        confluence_level = "LOW_CONFLUENCE"
         action_signal = "PASS_WAIT_FOR_CONFLUENCE"
         edge_recommendation = "PASS_WAIT_FOR_HIGH_EDGE_SIGNAL"
-        health_status = "HEALTHY"
-        health_reason = "Confluence below high edge threshold; abstaining safely"
 
     upcoming_issue_id = None
     if latest_issue:
