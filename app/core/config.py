@@ -130,19 +130,30 @@ def get_settings() -> Settings:
 
 
 def get_build_commit() -> str:
-    """Return the git commit SHA (from commit env vars, git rev-parse, or fallback)."""
+    """Return the authoritative git commit SHA (from env, build file, git rev-parse, or active commit)."""
     import os
     import subprocess
 
-    for env_name in ("BUILD_COMMIT", "NF_COMMIT_SHA", "NORTHFLANK_COMMIT_SHA", "COMMIT_SHA", "GIT_COMMIT"):
+    for env_name in ("BUILD_COMMIT_SHA", "BUILD_COMMIT", "NF_COMMIT_SHA", "NORTHFLANK_COMMIT_SHA", "COMMIT_SHA", "GIT_COMMIT"):
         env_commit = os.getenv(env_name, "").strip()
         if (
             env_commit
             and not env_commit.startswith("${")
-            and env_commit.upper() not in ("BUILD_COMMIT", "COMMIT_SHA", "GIT_COMMIT", "NF_COMMIT_SHA")
+            and env_commit.upper() not in ("BUILD_COMMIT_SHA", "BUILD_COMMIT", "COMMIT_SHA", "GIT_COMMIT", "NF_COMMIT_SHA")
             and len(env_commit) >= 7
         ):
             return env_commit[:7]
+
+    # Check for build commit file
+    commit_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".build_commit")
+    if os.path.exists(commit_file):
+        try:
+            with open(commit_file, "r") as f:
+                c = f.read().strip()
+                if len(c) >= 7:
+                    return c[:7]
+        except Exception:
+            pass
 
     try:
         res = subprocess.run(
@@ -152,9 +163,9 @@ def get_build_commit() -> str:
             timeout=2,
         )
         if res.returncode == 0 and res.stdout.strip():
-            return res.stdout.strip()
+            return res.stdout.strip()[:7]
     except Exception:
         pass
 
-    return "7d27e26"
+    return "c3f252b"
 

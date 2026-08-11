@@ -28,7 +28,7 @@ from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.game_result import GameResult
 from app.models.engine_prediction import EnginePrediction
-from app.core import get_settings
+from app.core import get_settings, get_build_commit
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -1279,7 +1279,14 @@ async def generate_prediction(
     brier_sum = 0.0
 
     for e_row in eval_rows:
-        _, p_size, p_conf_raw, actual_size = e_row
+        if isinstance(e_row, (tuple, list)):
+            p_size = e_row[1] if len(e_row) > 1 else None
+            p_conf_raw = e_row[2] if len(e_row) > 2 else 0.50
+            actual_size = e_row[3] if len(e_row) > 3 else None
+        else:
+            p_size = getattr(e_row, "predicted_size", None)
+            p_conf_raw = getattr(e_row, "confidence", 0.50)
+            actual_size = getattr(e_row, "calculated_size", None)
         p_conf = float(p_conf_raw) if p_conf_raw is not None else 0.50
         is_correct = (p_size == actual_size)
         if is_correct:
@@ -1445,6 +1452,7 @@ async def generate_prediction(
         "database_record_count": len(rows),
         "historical_records_loaded": len(rows),
         "feature_window_selected": analysis_window,
+        "build_commit": get_build_commit(),
         "status": "ACTIVE",
         "label": "STATISTICAL ANALYSIS — NOT A GUARANTEE",
         "disclaimer": "This prediction is based on 15-indicator statistical ensemble analysis for the upcoming game period. Each draw is an independent random event.",
