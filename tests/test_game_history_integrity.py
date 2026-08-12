@@ -264,5 +264,5 @@ def test_frontend_html_has_no_prediction_history_rendering():
     assert "Wins / 5" not in HTML_PAGE
     assert "accuracy-pct" not in HTML_PAGE
     assert "Predicted Result" not in HTML_PAGE
-    assert "Game History" in HTML_PAGE
-    assert "Result</th>" in HTML_PAGE
+    assert "Real Game History" in HTML_PAGE
+    assert "Big Small</th>" in HTML_PAGE

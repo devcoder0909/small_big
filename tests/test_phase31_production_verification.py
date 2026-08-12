@@ -64,9 +64,8 @@ async def test_phase31_end_to_end_production_integration(db_session):
         # UI Endpoint
         res_ui = await client.get("/")
         assert res_ui.status_code == 200
-        assert "GAME 1: BIG / SMALL PREDICTION" in res_ui.text
-        assert "GAME 2: NUMBER GAME PREDICTION" in res_ui.text
-        assert "LATEST REAL COMPLETED RESULT" in res_ui.text
+        assert "GAME 1: NUMBER GAME PREDICTION" in res_ui.text
+        assert "GAME 2: BIG / SMALL PREDICTION" in res_ui.text
         assert "Real Game History" in res_ui.text
 
         # API Endpoint

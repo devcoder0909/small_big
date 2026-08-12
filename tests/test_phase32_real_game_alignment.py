@@ -30,9 +30,9 @@ def test_phase32_color_exclusion_from_predictions():
 
 
 def test_phase32_ui_template_contains_all_game_cards_and_columns():
-    """Verify HTML UI contains Game 1 Number, Game 2 Big/Small, Latest Result, and History Color column."""
+    """Verify HTML UI contains Game 1 Number, Game 2 Big/Small, and History Color column."""
     assert "GAME 1: NUMBER GAME PREDICTION" in HTML_PAGE
     assert "GAME 2: BIG / SMALL PREDICTION" in HTML_PAGE
-    assert "LATEST REAL COMPLETED RESULT" in HTML_PAGE
     assert "Real Game History" in HTML_PAGE
     assert "Color" in HTML_PAGE
+
