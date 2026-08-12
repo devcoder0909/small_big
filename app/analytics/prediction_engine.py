@@ -913,14 +913,6 @@ async def generate_prediction(
         default_limit = window
 
     t0_db = time.monotonic()
-    # Query authoritative total PostgreSQL row count
-    count_stmt = select(func.count()).select_from(GameResult)
-    try:
-        count_res = await session.execute(count_stmt)
-        total_db_count = count_res.scalar() or 0
-    except Exception:
-        total_db_count = 0
-
     query = (
         select(GameResult.calculated_size, GameResult.issue_id, GameResult.result_number, GameResult.source_color)
         .order_by(desc(GameResult.issue_id))
@@ -929,8 +921,18 @@ async def generate_prediction(
 
     result = await session.execute(query)
     rows = result.fetchall()
-    if total_db_count == 0:
-        total_db_count = len(rows)
+    total_db_count = len(rows)
+
+    # Attempt authoritative PostgreSQL total count query
+    try:
+        count_stmt = select(func.count()).select_from(GameResult)
+        count_res = await session.execute(count_stmt)
+        c_val = count_res.scalar()
+        if c_val is not None and isinstance(c_val, int) and c_val >= len(rows):
+            total_db_count = c_val
+    except Exception:
+        pass
+
     t1_db = time.monotonic()
     database_ms = (t1_db - t0_db) * 1000.0
 
@@ -945,12 +947,16 @@ async def generate_prediction(
             "label": "STATISTICAL ANALYSIS — NOT A GUARANTEE",
         }
 
-    # === PRE-PREDICTION DATA GATE: CONTINUOUS LATEST VALID SLICE EXTRACTION ===
+    # === PRE-PREDICTION DATA GATE & FULL-POPULATION GAP ANALYSIS ===
     contiguous_rows = []
+    gap_count = 0
+    largest_gap = 0
+    contiguous_segments = []
+    current_segment = []
+
     if rows:
         for i in range(len(rows)):
             row = rows[i]
-            # Validate row content
             if not (0 <= getattr(row, "result_number", -1) <= 9) or getattr(row, "calculated_size", None) not in ("BIG", "SMALL"):
                 break
 
@@ -958,25 +964,30 @@ async def generate_prediction(
                 try:
                     curr_id = int(rows[i - 1].issue_id)
                     prev_id = int(row.issue_id)
-                    if curr_id - prev_id != 1:
-                        logger.warning(
-                            "pre_prediction_data_gate_gap_detected",
-                            latest_issue=rows[0].issue_id,
-                            gap_after=rows[i - 1].issue_id,
-                            next_available=row.issue_id,
-                            contiguous_count=len(contiguous_rows),
-                        )
-                        # Trigger background recovery asynchronously to fill older missing records
-                        try:
-                            from app.services.recovery_service import recover_missing_records
-                            asyncio.create_task(recover_missing_records(session))
-                        except Exception:
-                            pass
-                        break
+                    diff = curr_id - prev_id
+                    if diff != 1:
+                        gap_count += 1
+                        missing = max(0, diff - 1)
+                        if missing > largest_gap:
+                            largest_gap = missing
+                        if current_segment:
+                            contiguous_segments.append(current_segment)
+                            current_segment = []
+                        if len(contiguous_rows) == 0 and i > 0:
+                            contiguous_rows = list(rows[:i])
                 except (ValueError, TypeError):
                     break
 
-            contiguous_rows.append(row)
+            current_segment.append(row)
+
+        if current_segment:
+            contiguous_segments.append(current_segment)
+
+        if len(contiguous_rows) == 0:
+            contiguous_rows = list(rows)
+
+    contiguous_segment_count = len(contiguous_segments) if contiguous_segments else 1
+    largest_contiguous_segment = max((len(s) for s in contiguous_segments), default=len(contiguous_rows))
 
     if len(contiguous_rows) < 5:
         return {
@@ -1470,6 +1481,10 @@ async def generate_prediction(
             "total_records_analyzed": total_db_count,
             "valid_contiguous_record_count": len(rows),
             "feature_window_selected": analysis_window,
+            "gap_count": gap_count,
+            "largest_gap": largest_gap,
+            "contiguous_segment_count": contiguous_segment_count,
+            "largest_contiguous_segment": largest_contiguous_segment,
             "latest_confirmed_period": latest_issue,
             "target_period": upcoming_issue_id,
             "build_commit": get_build_commit(),

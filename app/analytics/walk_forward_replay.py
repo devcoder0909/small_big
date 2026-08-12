@@ -120,6 +120,15 @@ async def run_walk_forward_replay(
         if len(history_slice) < 5:
             continue
 
+        # Zero Future Leakage Assertion
+        max_feature_issue_id = max(int(r.issue_id) for r in history_slice)
+        target_issue_val = int(target_issue_id)
+        if max_feature_issue_id >= target_issue_val:
+            raise RuntimeError(
+                f"CRITICAL LEAKAGE FAILURE: max_feature_issue_id ({max_feature_issue_id}) "
+                f">= target_issue_id ({target_issue_val})"
+            )
+
         sizes = [r.calculated_size for r in history_slice]
         numbers = [r.result_number for r in history_slice]
         colors = [r.source_color for r in history_slice]
