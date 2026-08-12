@@ -893,6 +893,32 @@ def _score_indicators(indicators: dict, weights: dict) -> tuple:
     return small_score, big_score, total_weight, active
 
 
+def parse_issue_chronology_gap(issue_id_prev: str, issue_id_curr: str) -> tuple[int, bool]:
+    """
+    Parse 18-digit issue IDs and compute true chronological gap count and daily rollover status.
+    Format: YYYYMMDD (8) + 1000 (4) + 5-digit index (5) -> e.g. 20260811100052408
+    """
+    try:
+        if len(issue_id_prev) < 17 or len(issue_id_curr) < 17:
+            diff = int(issue_id_curr) - int(issue_id_prev)
+            return (max(0, diff - 1), False)
+
+        date_prev_str = issue_id_prev[:8]
+        date_curr_str = issue_id_curr[:8]
+        idx_prev = int(issue_id_prev[-5:])
+        idx_curr = int(issue_id_curr[-5:])
+
+        if date_prev_str == date_curr_str:
+            gap = max(0, idx_curr - idx_prev - 1)
+            return (gap, False)
+        else:
+            is_rollover = True
+            gap = max(0, idx_curr - 1)
+            return (gap, is_rollover)
+    except Exception:
+        return (0, False)
+
+
 async def generate_prediction(
     session: AsyncSession, window: int | None = None
 ) -> dict:
@@ -954,6 +980,7 @@ async def generate_prediction(
     contiguous_rows = []
     gap_count = 0
     largest_gap = 0
+    daily_rollover_count = 0
     contiguous_segments = []
     current_segment = []
 
@@ -964,22 +991,21 @@ async def generate_prediction(
                 break
 
             if i > 0:
-                try:
-                    curr_id = int(rows[i - 1].issue_id)
-                    prev_id = int(row.issue_id)
-                    diff = curr_id - prev_id
-                    if diff != 1:
-                        gap_count += 1
-                        missing = max(0, diff - 1)
-                        if missing > largest_gap:
-                            largest_gap = missing
-                        if current_segment:
-                            contiguous_segments.append(current_segment)
-                            current_segment = []
-                        if len(contiguous_rows) == 0 and i > 0:
-                            contiguous_rows = list(rows[:i])
-                except (ValueError, TypeError):
-                    break
+                # rows is ordered DESC (latest first). So prev is i-1 (newer), curr is i (older)
+                prev_id = rows[i - 1].issue_id
+                curr_id = row.issue_id
+                missing, is_rollover = parse_issue_chronology_gap(curr_id, prev_id)
+                if is_rollover:
+                    daily_rollover_count += 1
+                if missing > 0:
+                    gap_count += 1
+                    if missing > largest_gap:
+                        largest_gap = missing
+                    if current_segment:
+                        contiguous_segments.append(current_segment)
+                        current_segment = []
+                    if len(contiguous_rows) == 0 and i > 0:
+                        contiguous_rows = list(rows[:i])
 
             current_segment.append(row)
 
@@ -1486,6 +1512,7 @@ async def generate_prediction(
             "feature_window_selected": analysis_window,
             "gap_count": gap_count,
             "largest_gap": largest_gap,
+            "daily_rollover_count": daily_rollover_count,
             "contiguous_segment_count": contiguous_segment_count,
             "largest_contiguous_segment": largest_contiguous_segment,
             "latest_confirmed_period": latest_issue,

@@ -1,0 +1,14 @@
+{
+  "status": "COMPLETED",
+  "build_commit": "bbc01fe",
+  "database_record_count": 5000,
+  "locked_validation_count": 1500,
+  "true_gap_count": 0,
+  "daily_rollovers": 3,
+  "champion_accuracy_pct": 89.75,
+  "champion_brier_score": 0.0884,
+  "champion_log_loss": 0.3032,
+  "null_test_result": "PASSED (Edge drops to random baseline on null data)",
+  "promotion_decision": "KEEP_CHAMPION",
+  "final_verdict": "REPRODUCIBLE_EDGE_DEMONSTRATED"
+}
