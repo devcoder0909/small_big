@@ -942,7 +942,7 @@ async def generate_prediction(
     query = (
         select(GameResult.calculated_size, GameResult.issue_id, GameResult.result_number, GameResult.source_color)
         .order_by(desc(GameResult.issue_id))
-        .limit(max(default_limit, 1000))
+        .limit(max(default_limit, 10000))
     )
 
     result = await session.execute(query)
@@ -1452,7 +1452,6 @@ async def generate_prediction(
         "confidence": confidence,
         "action_signal": action_signal,
         "indicator_confluence": indicator_confluence,
-        "model_health": model_health,
         "latency_ms": {
             "database_ms": round(database_ms, 2),
             "regime_ms": round(regime_ms, 2),
@@ -1461,6 +1460,50 @@ async def generate_prediction(
             "total_ms": round(total_ms, 2),
         },
     }
+
+    # === 10-CLASS DIGIT PREDICTION INTEGRATION ===
+    from app.analytics.digit_predictor import predict_digits
+    digit_res = predict_digits(numbers_active, numbers, analysis_window)
+
+    # Fetch AI Digit Hypothesis in parallel/advisory mode
+    if ai_reasoning:
+        try:
+            from app.analytics.ai_rotator import fetch_ai_digit_prediction
+            ai_digit_summary = {
+                "entropy": shannon_entropy,
+                "z_score": z_score,
+                "top_statistical_digits": digit_res.get("top_numbers", [0, 1, 2, 3]),
+                "regime": regime_name,
+            }
+            ai_digit_res = await asyncio.wait_for(
+                fetch_ai_digit_prediction(numbers_active or [], sizes_active, ai_digit_summary),
+                timeout=float(getattr(get_settings(), "ai_timeout_seconds", 3.0)),
+            )
+            if ai_digit_res:
+                digit_res["ai_digit_hypothesis"] = ai_digit_res
+        except Exception as ai_d_err:
+            logger.warning("ai_digit_rotator_warning", error=str(ai_d_err))
+
+    # === DUAL GAME CONFLUENCE & SYNERGY ===
+    digit_size_pred = "BIG" if digit_res.get("p_big", 0.5) >= 0.50 else "SMALL"
+    dual_game_agreement = (prediction == digit_size_pred)
+
+    if dual_game_agreement and confidence >= 0.65:
+        confluence_level = "DUAL_GAME_SUPER_CONFLUENCE"
+
+    # Non-invasive shadow telemetry recording
+    try:
+        from app.analytics.telemetry import telemetry_collector
+        telemetry_collector.record_digit_prediction(
+            issue_id=upcoming_issue_id,
+            digit_pred_dict=digit_res,
+            predicted_size=prediction,
+            confidence=confidence,
+            regime_name=regime_name,
+            analysis_window=analysis_window,
+        )
+    except Exception:
+        pass
 
     return {
         "prediction_id": upcoming_issue_id,
@@ -1472,10 +1515,13 @@ async def generate_prediction(
         "edge_level": edge_level,
         "confluence_level": confluence_level,
         "confluence_score": agreement_pct_val,
+        "dual_game_agreement": dual_game_agreement,
+        "dual_game_confluence": dual_game_agreement,
         "action_signal": action_signal,
         "edge_recommendation": edge_recommendation,
         "indicator_confluence": indicator_confluence,
         "model_health": model_health,
+        "digit_prediction": digit_res,
         "created_at_ms": now_ms,
         "shannon_entropy": shannon_entropy,
         "z_score": z_score,
@@ -1523,7 +1569,7 @@ async def generate_prediction(
             "target_period": upcoming_issue_id,
             "build_commit": get_build_commit(),
         },
-        "status": "READY",
+        "status": "ACTIVE",
         "label": "STATISTICAL ANALYSIS — NOT A GUARANTEE",
         "disclaimer": "This prediction is based on 15-indicator statistical ensemble analysis for the upcoming game period. Each draw is an independent random event.",
     }
@@ -1555,6 +1601,15 @@ async def persist_original_prediction(session: AsyncSession, prediction_res: dic
     if not upcoming_issue or not predicted_size or predicted_size not in ("SMALL", "BIG"):
         return
 
+    digit_data = prediction_res.get("digit_prediction", {})
+    predicted_digit = digit_data.get("predicted_digit")
+    digit_confidence = digit_data.get("digit_confidence")
+    digit_top_3_str = ",".join(str(d) for d in digit_data.get("top_numbers", [])[:3]) if digit_data.get("top_numbers") else None
+    digit_top_4_str = ",".join(str(d) for d in digit_data.get("top_numbers", [])) if digit_data.get("top_numbers") else None
+    digit_probs_str = ",".join(str(p) for p in digit_data.get("digit_probabilities", [])) if digit_data.get("digit_probabilities") else None
+    digit_method = digit_data.get("method")
+    digit_abstained = 1 if digit_data.get("abstained") else 0
+
     dialect_name = "postgresql"
     try:
         bind = session.get_bind()
@@ -1576,6 +1631,13 @@ async def persist_original_prediction(session: AsyncSession, prediction_res: dic
                 regime_at_prediction=prediction_res.get("regime"),
                 champion_at_prediction=prediction_res.get("strategy_used"),
                 analysis_window_at_prediction=prediction_res.get("selected_window"),
+                predicted_digit=predicted_digit,
+                digit_confidence=float(digit_confidence) if digit_confidence is not None else None,
+                digit_top_3=digit_top_3_str,
+                digit_top_4=digit_top_4_str,
+                digit_probabilities=digit_probs_str,
+                digit_method=digit_method,
+                digit_abstained=digit_abstained,
                 created_at_ms=prediction_res.get("created_at_ms"),
                 created_at=datetime.now(timezone.utc),
             ).on_conflict_do_nothing(index_elements=["issue_id"])
@@ -1595,6 +1657,13 @@ async def persist_original_prediction(session: AsyncSession, prediction_res: dic
                     regime_at_prediction=prediction_res.get("regime"),
                     champion_at_prediction=prediction_res.get("strategy_used"),
                     analysis_window_at_prediction=prediction_res.get("selected_window"),
+                    predicted_digit=predicted_digit,
+                    digit_confidence=float(digit_confidence) if digit_confidence is not None else None,
+                    digit_top_3=digit_top_3_str,
+                    digit_top_4=digit_top_4_str,
+                    digit_probabilities=digit_probs_str,
+                    digit_method=digit_method,
+                    digit_abstained=digit_abstained,
                     created_at_ms=prediction_res.get("created_at_ms"),
                     created_at=datetime.now(timezone.utc),
                 )

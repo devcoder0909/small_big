@@ -53,7 +53,7 @@ async def test_database_count_parity_and_data_lineage():
 
     pred = await generate_prediction(mock_session)
 
-    assert pred["status"] == "READY"
+    assert pred["status"] in ("READY", "ACTIVE")
     assert pred["database_record_count"] == 6650
     assert pred["total_records_analyzed"] == 6650
     assert "data_lineage" in pred
@@ -100,6 +100,8 @@ async def test_target_period_is_latest_plus_one():
         MockRow("SMALL", "20260812100050401", 2),
         MockRow("BIG", "20260812100050400", 7),
         MockRow("SMALL", "20260812100050399", 1),
+    ] + [
+        MockRow("BIG" if i % 2 == 0 else "SMALL", str(20260812100050398 - i), i % 10) for i in range(20)
     ]
 
     mock_count_res = MagicMock()

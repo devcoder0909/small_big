@@ -27,6 +27,13 @@ class EnginePrediction(Base):
     regime_at_prediction = Column(String(64), nullable=True)
     champion_at_prediction = Column(String(64), nullable=True)
     analysis_window_at_prediction = Column(Integer, nullable=True)
+    predicted_digit = Column(Integer, nullable=True)
+    digit_confidence = Column(Float, nullable=True)
+    digit_top_3 = Column(String(64), nullable=True)
+    digit_top_4 = Column(String(64), nullable=True)
+    digit_probabilities = Column(String(512), nullable=True)
+    digit_method = Column(String(64), nullable=True)
+    digit_abstained = Column(Integer, nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (

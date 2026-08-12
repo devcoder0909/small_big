@@ -133,6 +133,16 @@ class PredictionPipeline:
                         except Exception:
                             latest_rec = None
 
+                    if latest_rec and hasattr(latest_rec, "result_number") and getattr(latest_rec, "result_number", None) is not None:
+                        try:
+                            telemetry_collector.record_actual_result(
+                                issue_id=latest_issue_id,
+                                result_number=int(latest_rec.result_number),
+                                actual_size=str(getattr(latest_rec, "calculated_size", "BIG")),
+                            )
+                        except Exception:
+                            pass
+
                     if latest_rec and type(latest_rec).__name__ != "MagicMock" and type(latest_rec).__name__ != "AsyncMock":
                         last_obs = getattr(latest_rec, "first_observed_at", None) or getattr(latest_rec, "created_at", None)
                         if last_obs and isinstance(last_obs, datetime):

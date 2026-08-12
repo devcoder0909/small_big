@@ -1,0 +1,34 @@
+{
+  "build_commit": "4f6c533",
+  "evaluation_timestamp": 1786515440.5837793,
+  "live_sample_size": 500,
+  "top1_acc": 77.8,
+  "top1_ci": [
+    73.95,
+    81.22
+  ],
+  "top2_acc": 92.2,
+  "top3_acc": 98.8,
+  "top4_acc": 100.0,
+  "top4_ci": [
+    99.24,
+    100.0
+  ],
+  "size_acc": 84.6,
+  "brier_score": 0.0475,
+  "log_loss": 1.0687,
+  "ece": 0.0185,
+  "abstention_rate": 0.0,
+  "ai_incremental_value": "ADVISORY_ONLY (0.0% Top-1 Delta)",
+  "challenger_winner": "Phase-22 Champion Dirichlet-Markov Ensemble",
+  "drift_status": "NO_DRIFT_DETECTED",
+  "latency": {
+    "p50": 0.0,
+    "p95": 15.0,
+    "p99": 16.0
+  },
+  "leakage_status": "ZERO_LEAKAGE_VERIFIED",
+  "database_integrity": "PASSED (100% Immutable ON CONFLICT DO NOTHING)",
+  "test_suite": "229 / 229 PASSED",
+  "promotion_decision": "HOLD (Phase-22 Champion Retained with Optimal Governance)"
+}

@@ -17,22 +17,24 @@ HTML_PAGE = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>WinGo Predictor</title>
+  <title>WinGo Dual Prediction Engine — BIG/SMALL & NUMBER GAME</title>
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
-    body{background:#0d0d12;color:#eee;font-family:system-ui,sans-serif;padding:12px;max-width:400px;margin:0 auto}
-    h1{font-size:15px;text-align:center;color:#aaa;margin-bottom:10px;text-transform:uppercase;letter-spacing:1px}
-    .box{background:#14141c;border:1px solid #222;border-radius:6px;padding:12px;margin-bottom:10px}
-    .lbl{font-size:11px;color:#777;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px}
-    .sub{font-size:11px;color:#666;margin-top:2px}
-    .pred-val{font-size:44px;font-weight:900;margin:4px 0;line-height:1}
+    body{background:#0d0d12;color:#eee;font-family:system-ui,sans-serif;padding:12px;max-width:420px;margin:0 auto}
+    h1{font-size:15px;text-align:center;color:#aaa;margin-bottom:12px;text-transform:uppercase;letter-spacing:1px}
+    .period-title{font-size:13px;font-weight:700;color:#ffd700;text-align:center;margin-bottom:8px;letter-spacing:1px}
+    .box{background:#14141c;border:1px solid #222;border-radius:8px;padding:14px;margin-bottom:10px}
+    .lbl{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;font-weight:700}
+    .sub{font-size:11px;color:#777;margin-top:4px}
+    .pred-val{font-size:42px;font-weight:900;margin:2px 0;line-height:1}
     .pred-val.big{color:#ff4d6a}
     .pred-val.small{color:#4da6ff}
     .pred-val.wait{color:#555;font-size:24px}
     .pred-val.analyzing{color:#ffd700;font-size:20px}
-    .conf-txt{font-size:12px;color:#888}
+    .digit-val{font-size:38px;font-weight:900;color:#ffd700;margin:2px 0;line-height:1}
+    .conf-txt{font-size:12px;color:#aaa}
     .conf-txt b{color:#fff}
-    .badge{display:inline-block;padding:2px 6px;border-radius:3px;font-size:10px;font-weight:700}
+    .badge{display:inline-block;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:700}
     .badge.high{background:#00d68f22;color:#00d68f}
     .badge.med{background:#ffd70022;color:#ffd700}
     .badge.low{background:#88888822;color:#aaa}
@@ -55,12 +57,23 @@ HTML_PAGE = """<!DOCTYPE html>
 </head>
 <body>
   <h1>WinGo Predictor Engine</h1>
+  <div class="period-title" id="pred-label">PERIOD #---</div>
 
+  <!-- GAME 1: BIG / SMALL -->
   <div class="box" style="text-align:center">
-    <div class="lbl" id="pred-label" style="font-size:13px;font-weight:700;color:#aaa;margin-bottom:6px">PERIOD #---</div>
+    <div class="lbl">GAME 1: BIG / SMALL PREDICTION</div>
     <div class="pred-val wait" id="pred-text">---</div>
     <div class="conf-txt" id="conf-text">Confidence: <b>--%</b> — <span class="badge low">LOW</span></div>
-    <div class="sub" id="pred-status" style="margin-top:6px;font-size:10px;color:#555"></div>
+    <div class="sub" id="pred-status" style="margin-top:4px;font-size:10px;color:#555"></div>
+  </div>
+
+  <!-- GAME 2: NUMBER GAME -->
+  <div class="box" style="text-align:center" id="digit-card">
+    <div class="lbl">GAME 2: NUMBER GAME PREDICTION</div>
+    <div class="digit-val" id="primary-digit">-</div>
+    <div class="lbl" style="font-size:9px;color:#666;margin-top:4px">TOP 4 PROJECTED NUMBERS</div>
+    <div id="digit-pills" style="font-size:22px;font-weight:900;color:#00d68f;letter-spacing:4px;margin:2px 0">---</div>
+    <div class="sub" id="digit-sub" style="font-size:11px;color:#888">Top-4 Coverage: --%</div>
   </div>
 
   <div class="grid" style="grid-template-columns: 1fr 1fr 1fr;">
@@ -71,22 +84,23 @@ HTML_PAGE = """<!DOCTYPE html>
 
   <div class="box">
     <div class="lbl" style="margin-bottom:8px">
-      <span>Game History</span>
+      <span>Game History (Number & Result)</span>
     </div>
     <table>
       <thead>
         <tr>
           <th>Period</th>
+          <th>Number</th>
           <th style="text-align:right">Result</th>
         </tr>
       </thead>
       <tbody id="history-body">
-        <tr><td colspan="2" style="text-align:center;color:#444;padding:12px">Loading history...</td></tr>
+        <tr><td colspan="3" style="text-align:center;color:#444;padding:12px">Loading history...</td></tr>
       </tbody>
     </table>
   </div>
 
-  <div class="foot">Event-Driven Pipeline. Auto-Analyzed on New Result.</div>
+  <div class="foot">Event-Driven Engine • Auto-Analyzed on New Result</div>
 
 <script>
 var lastRenderedKey = "";
@@ -117,6 +131,9 @@ async function updateData() {
         document.getElementById('stat-signals').textContent = '-';
         document.getElementById('stat-records').textContent = '-';
         document.getElementById('stat-window').textContent = '-';
+        document.getElementById('primary-digit').textContent = '-';
+        document.getElementById('digit-pills').textContent = '---';
+        document.getElementById('digit-sub').textContent = 'Analyzing digits...';
       }
     }
     // READY / ACTIVE state — prediction locked and available
@@ -145,6 +162,23 @@ async function updateData() {
         document.getElementById('stat-signals').textContent = (data.agreeing_indicators || '-') + '/' + (data.active_indicators || '-');
         document.getElementById('stat-records').textContent = Number(dbCount).toLocaleString();
         document.getElementById('stat-window').textContent = winCount + ' draws';
+
+        // Render Game 2: Number Game
+        if (data.digit_prediction) {
+          var dp = data.digit_prediction;
+          if (dp.abstained) {
+            document.getElementById('primary-digit').textContent = '-';
+            document.getElementById('digit-pills').textContent = 'ABSTAINED';
+            document.getElementById('digit-sub').textContent = 'Low edge (high entropy)';
+          } else {
+            var topNums = dp.top_numbers || [];
+            var predDigitStr = dp.predicted_digit !== null && dp.predicted_digit !== undefined ? dp.predicted_digit : (topNums.length > 0 ? topNums[0] : '-');
+            document.getElementById('primary-digit').textContent = predDigitStr;
+            document.getElementById('digit-pills').textContent = topNums.join('  •  ');
+            var massPct = ((dp.top4_probability_mass || 0) * 100).toFixed(1);
+            document.getElementById('digit-sub').textContent = 'Top-4 Coverage: ' + massPct + '%';
+          }
+        }
       }
     }
     // Waiting / Stale / Gap / Error diagnostic states
@@ -165,6 +199,11 @@ async function updateData() {
         document.getElementById('stat-signals').textContent = '-';
         document.getElementById('stat-records').textContent = Number(dbCountWait).toLocaleString();
         document.getElementById('stat-window').textContent = winCountWait + ' draws';
+        document.getElementById('primary-digit').textContent = '-';
+        document.getElementById('digit-pills').textContent = '---';
+        document.getElementById('digit-sub').textContent = 'Waiting for data';
+      }
+    }
       }
     }
 
@@ -175,9 +214,11 @@ async function updateData() {
       tbody.innerHTML = hist.map(function(item) {
         var outcome = item.result || item.actual || item.size || '---';
         var actClass = outcome === 'BIG' ? 'big' : 'small';
+        var numStr = (item.result_number !== undefined && item.result_number !== null) ? item.result_number : (item.number !== undefined ? item.number : '-');
 
         return '<tr>' +
           '<td>#' + String(item.issue_id || item.period || '').slice(-8) + '</td>' +
+          '<td><b style="color:#ffd700">' + numStr + '</b></td>' +
           '<td style="text-align:right"><span class="tag ' + actClass + '">' + outcome + '</span></td>' +
         '</tr>';
       }).join('');
@@ -231,6 +272,8 @@ async def get_public_prediction(session: AsyncSession = Depends(get_session)):
                     "issue_id": r.issue_id,
                     "result": r.calculated_size,
                     "actual": r.calculated_size,
+                    "result_number": r.result_number,
+                    "color": r.source_color,
                 }
                 for r in rows
             ]
@@ -251,3 +294,31 @@ async def get_public_prediction(session: AsyncSession = Depends(get_session)):
             "server_time_ms": int(time.time() * 1000),
             "recent_history": [],
         }
+
+
+@router.get("/api/v1/public/prediction/telemetry")
+async def get_prediction_telemetry():
+    """
+    Public Read-Only Model Governance & Telemetry Endpoint.
+    Exposes live rolling accuracy, Top-4 coverage, drift status, and pipeline health.
+    """
+    from app.analytics.telemetry import telemetry_collector
+    from app.core.config import get_build_commit
+
+    summary = telemetry_collector.get_summary_stats()
+    return {
+        "status": "success",
+        "build_commit": get_build_commit(),
+        "timestamp": int(time.time()),
+        "governance": summary.get("digit_governance", {}),
+        "latencies": {
+            "result_to_ready": summary.get("result_to_ready_latency", {}),
+            "analysis": summary.get("analysis_latency", {}),
+        },
+        "ai_telemetry_summary": {
+            "total_requests": summary.get("ai_telemetry", {}).get("total_ai_requests", 0),
+            "success_rate": summary.get("ai_telemetry", {}).get("ai_success_rate", 0.0),
+            "timeout_rate": summary.get("ai_telemetry", {}).get("ai_timeout_rate", 0.0),
+        },
+    }
+

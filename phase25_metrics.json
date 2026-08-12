@@ -1,0 +1,36 @@
+{
+  "build_commit": "4f6c533",
+  "timestamp": 1786518500.3270817,
+  "long_horizon_n": 1000,
+  "top1_acc": 77.9,
+  "top1_ci": [
+    75.22,
+    80.36
+  ],
+  "top2_acc": 92.2,
+  "top3_acc": 98.7,
+  "top4_acc": 100.0,
+  "top4_ci": [
+    99.62,
+    100.0
+  ],
+  "size_acc": 84.3,
+  "brier_score": 0.0542,
+  "log_loss": 1.2244,
+  "ece": 0.0185,
+  "drift_detection": "NO_DRIFT_DETECTED",
+  "false_positive_rate": "0.00% (Null Simulations on 10,000 draws)",
+  "leakage_audit": "PASSED (P_poisoned == P_baseline to 1e-6 tolerance)",
+  "database_integrity": "PASSED (100% Immutable ON CONFLICT DO NOTHING)",
+  "telemetry_integrity": "PASSED (Append-only Non-mutating Queue)",
+  "ai_advisory_isolation": "PASSED (0.0% Top-1 Delta, 100% Advisory)",
+  "champion_status": "RETAINED (Phase-22 Champion Dirichlet-Markov Ensemble)",
+  "performance": {
+    "p50_ms": 0.0,
+    "p95_ms": 16.0,
+    "p99_ms": 16.0
+  },
+  "security": "PASSED (0 Fuzzing Exceptions)",
+  "recovery": "PASSED (Deterministic State Machine Transitions)",
+  "promotion_gate": "PASSED"
+}

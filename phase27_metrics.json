@@ -1,0 +1,45 @@
+{
+  "build_commit": "4f6c533",
+  "timestamp": 1786519768.8829753,
+  "long_horizon_n": 1000,
+  "champion_stat_only": {
+    "top1_acc": 77.9,
+    "top1_ci": [
+      75.22,
+      80.36
+    ],
+    "top4_acc": 100.0,
+    "size_acc": 84.3,
+    "brier": 0.0542
+  },
+  "math_enhanced": {
+    "top1_acc": 77.9,
+    "top1_ci": [
+      75.22,
+      80.36
+    ],
+    "top4_acc": 100.0,
+    "size_acc": 84.3,
+    "brier": 0.0542
+  },
+  "ai_only": {
+    "top1_acc": 51.9,
+    "top1_ci": [
+      48.8,
+      54.98
+    ],
+    "top4_acc": 74.0,
+    "size_acc": 79.6
+  },
+  "combined_ensemble": {
+    "top1_acc": 77.9,
+    "top1_ci": [
+      75.22,
+      80.36
+    ],
+    "top4_acc": 100.0,
+    "size_acc": 84.3,
+    "brier": 0.0542
+  },
+  "decision": "RETAIN PRODUCTION CHAMPION \u2014 AI REMAINS ADVISORY ONLY (Zero Statistical Lift Achieved by AI Direct Control)"
+}

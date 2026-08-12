@@ -45,3 +45,7 @@ backups/
 
 # Chrome extension builds
 extension/*.zip
+
+# Secrets
+*AI api keys.txt
+*.txt.secret

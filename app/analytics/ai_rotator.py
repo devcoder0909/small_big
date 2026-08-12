@@ -388,3 +388,177 @@ async def fetch_ai_prediction(sizes: list[str], stat_summary: dict) -> dict | No
         )
 
     return None
+
+
+_ai_digit_cache: dict | None = None
+_ai_digit_cache_time: float = 0
+
+
+def _validate_and_parse_ai_digit_output(raw_text: str) -> dict | None:
+    """Strict validation for AI digit output (0-9 integer, confidence, top 3)."""
+    if not raw_text or not isinstance(raw_text, str):
+        return None
+
+    cleaned = raw_text.strip()
+    if "```" in cleaned:
+        parts = cleaned.split("```")
+        for p in parts[1:]:
+            p_clean = p.replace("json", "").strip()
+            if p_clean.startswith("{") and p_clean.endswith("}"):
+                cleaned = p_clean
+                break
+
+    data = None
+    try:
+        data = json.loads(cleaned)
+    except Exception:
+        match = re.search(r"\{.*\}", cleaned, re.DOTALL)
+        if match:
+            try:
+                data = json.loads(match.group(0))
+            except Exception:
+                pass
+
+    if not isinstance(data, dict):
+        return None
+
+    raw_digit = data.get("ai_digit_prediction")
+    if raw_digit is None:
+        raw_digit = data.get("digit_prediction") or data.get("predicted_digit")
+
+    try:
+        pred_digit = int(raw_digit)
+        if pred_digit < 0 or pred_digit > 9:
+            return None
+    except (ValueError, TypeError):
+        return None
+
+    raw_conf = data.get("ai_digit_confidence") if "ai_digit_confidence" in data else data.get("confidence", 0.15)
+    try:
+        conf = float(raw_conf)
+        if math.isnan(conf) or math.isinf(conf) or conf < 0.0 or conf > 1.0:
+            return None
+        conf = min(0.95, max(0.10, conf))
+    except (ValueError, TypeError):
+        conf = 0.15
+
+    raw_top3 = data.get("ai_top_3") or data.get("top_3") or [pred_digit]
+    top_3 = []
+    if isinstance(raw_top3, list):
+        for item in raw_top3:
+            try:
+                d_val = int(item)
+                if 0 <= d_val <= 9 and d_val not in top_3:
+                    top_3.append(d_val)
+            except (ValueError, TypeError):
+                pass
+    if pred_digit not in top_3:
+        top_3.insert(0, pred_digit)
+    top_3 = top_3[:3]
+
+    reason = str(data.get("ai_reason") or "AI digit pattern analysis")
+    injection_keywords = ["ignore previous", "system prompt", "overwrite", "drop table", "<script>", "eval("]
+    if any(kw in reason.lower() for kw in injection_keywords):
+        reason = "AI digit pattern analysis"
+
+    return {
+        "ai_digit_prediction": pred_digit,
+        "ai_digit_confidence": round(conf, 4),
+        "ai_top_3": top_3,
+        "ai_reason": reason[:200],
+    }
+
+
+async def fetch_ai_digit_prediction(numbers: list[int], sizes: list[str], stat_summary: dict) -> dict | None:
+    """Fetch AI digit hypothesis signal across provider rotation pool."""
+    global _current_provider_index, _ai_digit_cache, _ai_digit_cache_time
+
+    settings = get_settings()
+    now_mono = time.monotonic()
+
+    if _ai_digit_cache and (now_mono - _ai_digit_cache_time) < CACHE_TTL:
+        return _ai_digit_cache
+
+    if not numbers or len(numbers) < 10:
+        return None
+
+    providers = _get_provider_pool()
+    if not providers:
+        return None
+
+    digit_seq = ", ".join(str(n) for n in list(reversed(numbers[:40])))
+    prompt = (
+        "You are a quantitative mathematical analyst specializing in single-digit (0-9) pattern forecasting.\n"
+        "Your task: analyze the digit sequence below, then predict the NEXT single digit (0-9).\n\n"
+        f"RECENT 40 DIGIT DRAWS (oldest -> newest): [{digit_seq}]\n\n"
+        f"LOCAL STATISTICAL SUMMARY:\n{json.dumps(stat_summary, indent=2)}\n\n"
+        "Respond ONLY with a JSON object in this EXACT format, with no markdown or extra text:\n"
+        '{"ai_digit_prediction": 7, "ai_digit_confidence": 0.15, "ai_top_3": [7, 8, 6], "ai_reason": "concise 1-sentence reasoning"}'
+    )
+
+    num_providers = len(providers)
+    start_idx = _current_provider_index
+    timeout_sec = float(getattr(settings, "ai_timeout_seconds", 3.0))
+
+    for step in range(num_providers):
+        idx = (start_idx + step) % num_providers
+        provider = providers[idx]
+        p_name = provider["name"]
+
+        cooldown_until = _key_cooldowns.get(p_name, 0)
+        if now_mono < cooldown_until:
+            continue
+
+        try:
+            async with httpx.AsyncClient(timeout=timeout_sec) as client:
+                if provider["type"] == "openai_compat":
+                    payload = {
+                        "model": provider["model"],
+                        "messages": [{"role": "user", "content": prompt}],
+                        "temperature": 0.2,
+                        "max_tokens": 150,
+                    }
+                    resp = await client.post(
+                        provider["url"],
+                        headers={
+                            "Authorization": f"Bearer {provider['key']}",
+                            "Content-Type": "application/json",
+                        },
+                        json=payload,
+                    )
+                else:
+                    resp = await client.post(
+                        f"{provider['url']}?key={provider['key']}",
+                        headers={"Content-Type": "application/json"},
+                        json={
+                            "contents": [{"parts": [{"text": prompt}]}],
+                            "generationConfig": {"temperature": 0.2, "maxOutputTokens": 150},
+                        },
+                    )
+
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if provider["type"] == "openai_compat":
+                        raw_text = data.get("choices", [{}])[0].get("message", {}).get("content", "") or ""
+                    else:
+                        raw_text = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+
+                    validated = _validate_and_parse_ai_digit_output(raw_text)
+                    if validated:
+                        result = {
+                            "ai_digit_prediction": validated["ai_digit_prediction"],
+                            "ai_digit_confidence": validated["ai_digit_confidence"],
+                            "ai_top_3": validated["ai_top_3"],
+                            "ai_reason": validated["ai_reason"],
+                            "provider": provider["name"],
+                            "model": provider["model"],
+                        }
+                        _ai_digit_cache = result
+                        _ai_digit_cache_time = now_mono
+                        _current_provider_index = (idx + 1) % num_providers
+                        return result
+        except Exception as err:
+            logger.warning("ai_digit_provider_error", provider=p_name, error=str(err))
+
+    return None
+
