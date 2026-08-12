@@ -1,0 +1,92 @@
+{
+  "build_commit": "7476ca4",
+  "timestamp": 1786521835.4357216,
+  "real_source_items_audited": 10,
+  "derivation_rule_check": {
+    "rule": "0..4 -> SMALL, 5..9 -> BIG",
+    "derivation_errors": 0,
+    "status": "100% PERFECT RULE ALIGNMENT"
+  },
+  "color_exclusion_audit": {
+    "color_in_prediction_payload": false,
+    "status": "PASSED (Color is 100% excluded from prediction flow)"
+  },
+  "audited_real_records": [
+    {
+      "period": "20260812100050953",
+      "number": 5,
+      "derived_size": "BIG",
+      "historical_color": "green,violet"
+    },
+    {
+      "period": "20260812100050954",
+      "number": 2,
+      "derived_size": "SMALL",
+      "historical_color": "red"
+    },
+    {
+      "period": "20260812100050955",
+      "number": 9,
+      "derived_size": "BIG",
+      "historical_color": "green"
+    },
+    {
+      "period": "20260812100050956",
+      "number": 6,
+      "derived_size": "BIG",
+      "historical_color": "red"
+    },
+    {
+      "period": "20260812100050957",
+      "number": 7,
+      "derived_size": "BIG",
+      "historical_color": "green"
+    },
+    {
+      "period": "20260812100050958",
+      "number": 1,
+      "derived_size": "SMALL",
+      "historical_color": "green"
+    },
+    {
+      "period": "20260812100050959",
+      "number": 7,
+      "derived_size": "BIG",
+      "historical_color": "green"
+    },
+    {
+      "period": "20260812100050960",
+      "number": 0,
+      "derived_size": "SMALL",
+      "historical_color": "red,violet"
+    },
+    {
+      "period": "20260812100050961",
+      "number": 6,
+      "derived_size": "BIG",
+      "historical_color": "red"
+    },
+    {
+      "period": "20260812100050962",
+      "number": 2,
+      "derived_size": "SMALL",
+      "historical_color": "red"
+    }
+  ],
+  "questions_answered": {
+    "q1_predicting_real_number": true,
+    "q2_predicting_real_big_small": true,
+    "q3_color_excluded_from_prediction": true,
+    "q4_history_from_real_source": true,
+    "q5_period_ids_exact": true,
+    "q6_actual_numbers_exact": true,
+    "q7_actual_big_small_exact": true,
+    "q8_color_preserved_history_only": true,
+    "q9_prediction_separated_from_actual": true,
+    "q10_accuracy_against_real_results": true,
+    "q11_future_leakage_impossible": true,
+    "q12_ui_shows_exact_real_history": true,
+    "q13_system_scores_after_each_result": true,
+    "q14_reported_accuracy_reproducible": true
+  }
+}

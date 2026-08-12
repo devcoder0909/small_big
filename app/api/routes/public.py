@@ -59,21 +59,21 @@ HTML_PAGE = """<!DOCTYPE html>
   <h1>WinGo Predictor Engine</h1>
   <div class="period-title" id="pred-label">PERIOD #---</div>
 
-  <!-- GAME 1: BIG / SMALL -->
-  <div class="box" style="text-align:center">
-    <div class="lbl">GAME 1: BIG / SMALL PREDICTION</div>
-    <div class="pred-val wait" id="pred-text">---</div>
-    <div class="conf-txt" id="conf-text">Confidence: <b>--%</b> — <span class="badge low">LOW</span></div>
-    <div class="sub" id="pred-status" style="margin-top:4px;font-size:10px;color:#555"></div>
-  </div>
-
-  <!-- GAME 2: NUMBER GAME -->
+  <!-- GAME 1: NUMBER GAME -->
   <div class="box" style="text-align:center" id="digit-card">
-    <div class="lbl">GAME 2: NUMBER GAME PREDICTION</div>
+    <div class="lbl">GAME 1: NUMBER GAME PREDICTION</div>
     <div class="digit-val" id="primary-digit">-</div>
     <div class="lbl" style="font-size:9px;color:#666;margin-top:4px">TOP 4 PROJECTED NUMBERS</div>
     <div id="digit-pills" style="font-size:22px;font-weight:900;color:#00d68f;letter-spacing:4px;margin:2px 0">---</div>
     <div class="sub" id="digit-sub" style="font-size:11px;color:#888">Top-4 Coverage: --%</div>
+  </div>
+
+  <!-- GAME 2: BIG / SMALL -->
+  <div class="box" style="text-align:center">
+    <div class="lbl">GAME 2: BIG / SMALL PREDICTION</div>
+    <div class="pred-val wait" id="pred-text">---</div>
+    <div class="conf-txt" id="conf-text">Confidence: <b>--%</b> — <span class="badge low">LOW</span></div>
+    <div class="sub" id="pred-status" style="margin-top:4px;font-size:10px;color:#555"></div>
   </div>
 
   <div class="grid" style="grid-template-columns: 1fr 1fr 1fr;">
@@ -86,27 +86,29 @@ HTML_PAGE = """<!DOCTYPE html>
   <div class="box" style="text-align:center;border-color:#333;background:#181824" id="latest-result-card">
     <div class="lbl" style="color:#ffd700">LATEST REAL COMPLETED RESULT</div>
     <div id="latest-period-label" style="font-size:11px;color:#aaa;margin-bottom:2px">PERIOD #---</div>
-    <div style="display:flex;justify-content:center;align-items:center;gap:12px;margin:4px 0">
-      <div><span style="font-size:10px;color:#888;text-transform:uppercase">Actual Digit:</span> <b style="font-size:24px;font-weight:900;color:#ffd700" id="latest-num-val">-</b></div>
-      <div><span style="font-size:10px;color:#888;text-transform:uppercase">Actual Size:</span> <span class="tag" style="font-size:14px;padding:3px 8px" id="latest-size-val">---</span></div>
+    <div style="display:flex;justify-content:center;align-items:center;gap:16px;margin:6px 0;flex-wrap:wrap">
+      <div><span style="font-size:10px;color:#888;text-transform:uppercase">Number:</span> <b style="font-size:24px;font-weight:900;color:#ffd700" id="latest-num-val">-</b></div>
+      <div><span style="font-size:10px;color:#888;text-transform:uppercase">Big Small:</span> <span class="tag" style="font-size:14px;padding:3px 8px" id="latest-size-val">---</span></div>
+      <div><span style="font-size:10px;color:#888;text-transform:uppercase">Color:</span> <span id="latest-color-val" style="font-size:13px;font-weight:bold;color:#ccc">---</span></div>
     </div>
-    <div class="sub" style="font-size:9px;color:#666">Real Game Database Record</div>
+    <div class="sub" style="font-size:9px;color:#666">Verified Real Game Result Record</div>
   </div>
 
   <div class="box">
     <div class="lbl" style="margin-bottom:8px">
-      <span>Real Game History (Actual Number & Size)</span>
+      <span>Real Game History (Actual Number, Size & Color)</span>
     </div>
     <table>
       <thead>
         <tr>
           <th>Period</th>
           <th>Number</th>
-          <th style="text-align:right">Result</th>
+          <th>Big Small</th>
+          <th style="text-align:right">Color</th>
         </tr>
       </thead>
       <tbody id="history-body">
-        <tr><td colspan="3" style="text-align:center;color:#444;padding:12px">Loading history...</td></tr>
+        <tr><td colspan="4" style="text-align:center;color:#444;padding:12px">Loading history...</td></tr>
       </tbody>
     </table>
   </div>
@@ -116,6 +118,23 @@ HTML_PAGE = """<!DOCTYPE html>
 <script>
 var lastRenderedKey = "";
 var currentPredictionData = null;
+
+function formatColorHtml(colorStr) {
+  if (!colorStr) return '<span style="color:#666">-</span>';
+  var c = String(colorStr).toLowerCase();
+  if (c.indexOf('red') !== -1 && c.indexOf('violet') !== -1) {
+    return '<span style="color:#ff4d4d">●</span><span style="color:#b388ff">● Red/Violet</span>';
+  } else if (c.indexOf('green') !== -1 && c.indexOf('violet') !== -1) {
+    return '<span style="color:#00e676">●</span><span style="color:#b388ff">● Green/Violet</span>';
+  } else if (c.indexOf('red') !== -1) {
+    return '<span style="color:#ff4d4d">● Red</span>';
+  } else if (c.indexOf('green') !== -1) {
+    return '<span style="color:#00e676">● Green</span>';
+  } else if (c.indexOf('violet') !== -1) {
+    return '<span style="color:#b388ff">● Violet</span>';
+  }
+  return '<span style="color:#ccc">' + colorStr + '</span>';
+}
 
 async function updateData() {
   try {
@@ -174,7 +193,7 @@ async function updateData() {
         document.getElementById('stat-records').textContent = Number(dbCount).toLocaleString();
         document.getElementById('stat-window').textContent = winCount + ' draws';
 
-        // Render Game 2: Number Game
+        // Render Game 1: Number Game
         if (data.digit_prediction) {
           var dp = data.digit_prediction;
           if (dp.abstained) {
@@ -215,15 +234,14 @@ async function updateData() {
         document.getElementById('digit-sub').textContent = 'Waiting for data';
       }
     }
-      }
-    }
 
     // Real Game History section & Latest Completed Result
     if (data.recent_history && data.recent_history.length > 0) {
       var latestRec = data.recent_history[0];
       var latestOutcome = latestRec.result || latestRec.actual || latestRec.size || '---';
       var latestNumStr = (latestRec.result_number !== undefined && latestRec.result_number !== null) ? latestRec.result_number : (latestRec.number !== undefined ? latestRec.number : '-');
-      var latestPeriod = String(latestRec.issue_id || latestRec.period || '').slice(-8);
+      var latestPeriod = String(latestRec.issue_id || latestRec.period || '');
+      var latestColor = latestRec.color || latestRec.source_color || '';
 
       document.getElementById('latest-period-label').textContent = 'PERIOD #' + (latestPeriod || '---');
       document.getElementById('latest-num-val').textContent = latestNumStr;
@@ -231,18 +249,21 @@ async function updateData() {
       var lSizeEl = document.getElementById('latest-size-val');
       lSizeEl.textContent = latestOutcome;
       lSizeEl.className = 'tag ' + (latestOutcome === 'BIG' ? 'big' : 'small');
+      document.getElementById('latest-color-val').innerHTML = formatColorHtml(latestColor);
 
-      var hist = data.recent_history.slice(0, 5);
+      var hist = data.recent_history.slice(0, 10);
       var tbody = document.getElementById('history-body');
       tbody.innerHTML = hist.map(function(item) {
         var outcome = item.result || item.actual || item.size || '---';
         var actClass = outcome === 'BIG' ? 'big' : 'small';
         var numStr = (item.result_number !== undefined && item.result_number !== null) ? item.result_number : (item.number !== undefined ? item.number : '-');
+        var colStr = item.color || item.source_color || '';
 
         return '<tr>' +
-          '<td>#' + String(item.issue_id || item.period || '').slice(-8) + '</td>' +
+          '<td>#' + String(item.issue_id || item.period || '') + '</td>' +
           '<td><b style="color:#ffd700">' + numStr + '</b></td>' +
-          '<td style="text-align:right"><span class="tag ' + actClass + '">' + outcome + '</span></td>' +
+          '<td><span class="tag ' + actClass + '">' + outcome + '</span></td>' +
+          '<td style="text-align:right">' + formatColorHtml(colStr) + '</td>' +
         '</tr>';
       }).join('');
     }
