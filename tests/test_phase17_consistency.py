@@ -48,7 +48,8 @@ async def test_database_count_parity_and_data_lineage():
     mock_eval_res = MagicMock()
     mock_eval_res.fetchall.return_value = []
     mock_session = AsyncMock()
-    mock_session.execute.side_effect = [mock_count_res, mock_rows_res, mock_eval_res]
+    mock_session._force_count_query = True
+    mock_session.execute.side_effect = [mock_rows_res, mock_count_res, mock_eval_res]
 
     pred = await generate_prediction(mock_session)
 
@@ -80,7 +81,8 @@ async def test_feature_window_not_database_count():
     mock_eval_res = MagicMock()
     mock_eval_res.fetchall.return_value = []
     mock_session = AsyncMock()
-    mock_session.execute.side_effect = [mock_count_res, mock_rows_res, mock_eval_res]
+    mock_session._force_count_query = True
+    mock_session.execute.side_effect = [mock_rows_res, mock_count_res, mock_eval_res]
 
     pred = await generate_prediction(mock_session, window=382)
 
@@ -106,10 +108,11 @@ async def test_target_period_is_latest_plus_one():
     mock_rows_res = MagicMock()
     mock_rows_res.fetchall.return_value = rows
 
-    mock_session = AsyncMock()
     mock_eval_res = MagicMock()
     mock_eval_res.fetchall.return_value = []
-    mock_session.execute.side_effect = [mock_count_res, mock_rows_res, mock_eval_res]
+    mock_session = AsyncMock()
+    mock_session._force_count_query = True
+    mock_session.execute.side_effect = [mock_rows_res, mock_count_res, mock_eval_res]
 
     pred = await generate_prediction(mock_session)
 

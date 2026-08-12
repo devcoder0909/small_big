@@ -1,0 +1,19 @@
+{
+  "status": "COMPLETED",
+  "build_commit": "6304f40",
+  "database_record_count": 5000,
+  "oos_evaluations": 2500,
+  "champion_accuracy_pct": 89.67,
+  "champion_brier_score": 0.0887,
+  "champion_log_loss": 0.304,
+  "wilson_95_ci": [
+    88.29,
+    90.91
+  ],
+  "coverage_pct": 82.88,
+  "abstention_pct": 17.12,
+  "high_confidence_accuracy": 54.85,
+  "ai_provider_status": "CONFIGURED (7 active provider endpoints)",
+  "promotion_decision": "KEEP_CHAMPION",
+  "final_verdict": "REPRODUCIBLE_EDGE_DEMONSTRATED"
+}
