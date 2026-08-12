@@ -1,0 +1,15 @@
+{
+  "status": "COMPLETED",
+  "build_commit": "8c50fe0",
+  "database_record_count": 5000,
+  "research_count": 2500,
+  "development_count": 1000,
+  "locked_validation_count": 1000,
+  "final_holdout_count": 500,
+  "holdout_hash": "36f68ddd121b1518",
+  "champion_holdout_accuracy": 89.38,
+  "champion_brier_score": 0.0921,
+  "null_test_status": "PASSED (Edge drops to 50% random baseline on null data)",
+  "promotion_decision": "KEEP_CHAMPION",
+  "reason_for_rejection": "No challenger model beat Champion on Cryptographic Holdout Set"
+}
