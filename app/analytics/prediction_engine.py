@@ -1461,9 +1461,15 @@ async def generate_prediction(
         },
     }
 
-    # === 10-CLASS DIGIT PREDICTION INTEGRATION ===
+    # === 10-CLASS DIGIT PREDICTION INTEGRATION (JOINT BAYESIAN ALIGNMENT) ===
     from app.analytics.digit_predictor import predict_digits
-    digit_res = predict_digits(numbers_active, numbers, analysis_window)
+    digit_res = predict_digits(
+        numbers_active,
+        numbers,
+        analysis_window,
+        ensemble_p_big=norm_big,
+        ensemble_p_small=norm_small,
+    )
 
     # Fetch AI Digit Hypothesis in parallel/advisory mode
     if ai_reasoning:

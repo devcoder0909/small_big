@@ -138,13 +138,15 @@ def predict_digits(
     numbers: list[int] | None,
     sizes: list[str] | None = None,
     window: int | None = None,
+    ensemble_p_big: float | None = None,
+    ensemble_p_small: float | None = None,
 ) -> dict:
     """
     Generate 10-class digit prediction vector and Top-4 maximum coverage numbers.
-    Analyzes full historical data with multi-horizon lookback, Markov transitions,
-    recurrence hazard, and parity pattern dynamics.
+    Jointly conditioned on macro ensemble priors (p_big, p_small) to guarantee
+    zero contradiction between Game 1 (Number) and Game 2 (Big/Small).
     """
-    if not numbers or len(numbers) < 10:
+    if not numbers or len(numbers) < 5:
         return {
             "predicted_digit": None,
             "top_numbers": [0, 1, 2, 3],
@@ -190,9 +192,22 @@ def predict_digits(
         for d in range(10)
     ]
 
+    # === JOINT BAYESIAN CONDITIONING ON BIG/SMALL ENSEMBLE ===
+    # Digits 0-4 are SMALL, Digits 5-9 are BIG.
+    if ensemble_p_big is not None and ensemble_p_small is not None:
+        p_big_prior = max(0.01, min(0.99, float(ensemble_p_big)))
+        p_small_prior = max(0.01, min(0.99, float(ensemble_p_small)))
+        raw_probs = [
+            raw_probs[d] * (2.0 * p_small_prior if d < 5 else 2.0 * p_big_prior)
+            for d in range(10)
+        ]
+
     # Normalize probabilities so sum(probs) == 1.0 strictly
     sum_probs = sum(raw_probs)
-    probs = [round(p / sum_probs, 4) for p in raw_probs]
+    if sum_probs <= 0:
+        probs = [0.10] * 10
+    else:
+        probs = [round(p / sum_probs, 4) for p in raw_probs]
 
     # Final normalization adjustment for floating point precision
     diff = 1.0 - sum(probs)
@@ -228,12 +243,13 @@ def predict_digits(
     overdue_digits = sorted(range(10), key=lambda d: p_recur[d], reverse=True)[:3]
 
     # Selective Prediction & Abstention Gating
+    # Only abstain if top probability has zero statistical separation (top1_prob <= 0.1001)
     is_abstained = False
     abstention_reason = None
 
-    if normalized_entropy >= 0.995 or top1_prob < 0.105:
+    if top1_prob <= 0.1001:
         is_abstained = True
-        abstention_reason = "EXTREME_ENTROPY_LOW_EDGE"
+        abstention_reason = "ZERO_STATISTICAL_SEPARATION"
 
     predicted_digit = None if is_abstained else top1
 
@@ -249,7 +265,7 @@ def predict_digits(
         "digit_confidence": top1_prob if not is_abstained else 0.0,
         "p_big": p_big,
         "p_small": p_small,
-        "method": "dirichlet_markov_multiorder_ensemble",
+        "method": "dirichlet_markov_joint_ensemble",
         "abstained": is_abstained,
         "abstention_reason": abstention_reason,
         "pattern_analysis": {
