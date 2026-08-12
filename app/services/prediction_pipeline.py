@@ -118,6 +118,9 @@ class PredictionPipeline:
 
             t_analysis_start_ms = int(time.time() * 1000)
             try:
+                from app.analytics.prediction_engine import clear_prediction_engine_cache
+                clear_prediction_engine_cache()
+
                 async with async_session_factory() as session:
                     # 1. Stale data & gap safety gate
                     from app.models.game_result import GameResult

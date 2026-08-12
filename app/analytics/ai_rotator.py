@@ -28,10 +28,21 @@ _key_cooldowns: dict[str, float] = {}
 CACHE_TTL = 8.0  # Cache AI predictions for 8 seconds to respect rate limits
 
 
+def _is_valid_api_key(key: str) -> bool:
+    if not key:
+        return False
+    k = key.strip().lower()
+    if any(k.startswith(prefix) for prefix in ("your_", "mock_", "dummy_", "placeholder_")):
+        return False
+    if len(k) < 8:
+        return False
+    return True
+
+
 def _get_provider_pool() -> list[dict]:
     """
     Get active provider pool dynamically configured from settings.
-    Providers with missing API keys are automatically disabled.
+    Providers with missing or placeholder API keys are automatically disabled.
     """
     settings = get_settings()
 
@@ -70,7 +81,7 @@ def _get_provider_pool() -> list[dict]:
     for provider_name in priority_list:
         if "nvidia" in provider_name and "nvidia" not in registered_names:
             for i, k in enumerate(nvidia_keys):
-                if k:
+                if _is_valid_api_key(k):
                     pool.append({
                         "name": f"nvidia_{i+1}",
                         "url": f"{nvidia_url.rstrip('/')}/chat/completions",
@@ -82,7 +93,7 @@ def _get_provider_pool() -> list[dict]:
 
         elif "openrouter" in provider_name and "openrouter" not in registered_names:
             for i, k in enumerate(openrouter_keys):
-                if k:
+                if _is_valid_api_key(k):
                     pool.append({
                         "name": f"openrouter_{i+1}",
                         "url": f"{openrouter_url.rstrip('/')}/chat/completions",
@@ -94,7 +105,7 @@ def _get_provider_pool() -> list[dict]:
 
         elif "groq" in provider_name and "groq" not in registered_names:
             for i, k in enumerate(groq_keys):
-                if k:
+                if _is_valid_api_key(k):
                     pool.append({
                         "name": f"groq_{i+1}",
                         "url": "https://api.groq.com/openai/v1/chat/completions",
@@ -106,12 +117,12 @@ def _get_provider_pool() -> list[dict]:
 
         elif "gemini" in provider_name and "gemini" not in registered_names:
             for i, k in enumerate(gemini_keys):
-                if k:
+                if _is_valid_api_key(k):
                     pool.append({
                         "name": f"gemini_{i+1}",
-                        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+                        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent",
                         "key": k,
-                        "model": "gemini-2.0-flash",
+                        "model": "gemini-1.5-flash",
                         "type": "gemini",
                     })
             registered_names.add("gemini")
@@ -243,7 +254,10 @@ async def fetch_ai_prediction(sizes: list[str], stat_summary: dict) -> dict | No
     start_idx = _current_provider_index
     timeout_sec = float(getattr(settings, "ai_timeout_seconds", 3.0))
 
+    t_overall_start = time.monotonic()
     for step in range(num_providers):
+        if (time.monotonic() - t_overall_start) >= timeout_sec:
+            break
         idx = (start_idx + step) % num_providers
         provider = providers[idx]
         p_name = provider["name"]
@@ -500,7 +514,10 @@ async def fetch_ai_digit_prediction(numbers: list[int], sizes: list[str], stat_s
     start_idx = _current_provider_index
     timeout_sec = float(getattr(settings, "ai_timeout_seconds", 3.0))
 
+    t_overall_start = time.monotonic()
     for step in range(num_providers):
+        if (time.monotonic() - t_overall_start) >= timeout_sec:
+            break
         idx = (start_idx + step) % num_providers
         provider = providers[idx]
         p_name = provider["name"]

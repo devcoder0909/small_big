@@ -750,6 +750,9 @@ def _run_all_indicators(sizes: list[str], numbers: list[int] | None = None, colo
     }
 
 
+_ADAPTIVE_WEIGHTS_CACHE: dict = {"timestamp": 0.0, "key": None, "weights": None}
+
+
 def _calculate_adaptive_indicator_weights(sizes: list[str], base_weights: dict, numbers: list[int] | None = None, colors: list[str] | None = None) -> dict:
     """
     Self-Learning Adaptive Weighting Engine.
@@ -762,6 +765,15 @@ def _calculate_adaptive_indicator_weights(sizes: list[str], base_weights: dict, 
     """
     if len(sizes) < 25:
         return dict(base_weights)
+
+    now_mono = time.monotonic()
+    cache_key = (sizes[0] if sizes else "", len(sizes))
+    if (
+        _ADAPTIVE_WEIGHTS_CACHE["weights"] is not None
+        and _ADAPTIVE_WEIGHTS_CACHE["key"] == cache_key
+        and (now_mono - _ADAPTIVE_WEIGHTS_CACHE["timestamp"]) < 1.0
+    ):
+        return dict(_ADAPTIVE_WEIGHTS_CACHE["weights"])
 
     # Indicator single-eval mapping
     eval_funcs = {
@@ -823,6 +835,9 @@ def _calculate_adaptive_indicator_weights(sizes: list[str], base_weights: dict, 
 
         adaptive[name] = round(base_w * mult, 4)
 
+    _ADAPTIVE_WEIGHTS_CACHE["timestamp"] = now_mono
+    _ADAPTIVE_WEIGHTS_CACHE["key"] = cache_key
+    _ADAPTIVE_WEIGHTS_CACHE["weights"] = adaptive
     return adaptive
 
 
@@ -919,6 +934,19 @@ def parse_issue_chronology_gap(issue_id_prev: str, issue_id_curr: str) -> tuple[
         return (0, False)
 
 
+# === PERFORMANCE OPTIMIZATION LAYER: IN-MEMORY QUERY CACHE (Sub-50ms) ===
+_GAME_RESULTS_CACHE: dict = {"timestamp": 0.0, "limit": 0, "session_id": None, "rows": [], "count": 0}
+_MODEL_HEALTH_CACHE: dict = {"timestamp": 0.0, "session_id": None, "rows": []}
+_PERSISTED_ISSUES_CACHE: set = set()
+
+def clear_prediction_engine_cache():
+    """Clear in-memory query caches (useful for testing and instant invalidation on new result commits)."""
+    global _GAME_RESULTS_CACHE, _MODEL_HEALTH_CACHE, _PERSISTED_ISSUES_CACHE
+    _GAME_RESULTS_CACHE = {"timestamp": 0.0, "limit": 0, "session_id": None, "rows": [], "count": 0}
+    _MODEL_HEALTH_CACHE = {"timestamp": 0.0, "session_id": None, "rows": []}
+    _PERSISTED_ISSUES_CACHE.clear()
+
+
 async def generate_prediction(
     session: AsyncSession, window: int | None = None
 ) -> dict:
@@ -939,28 +967,49 @@ async def generate_prediction(
         default_limit = window
 
     t0_db = time.monotonic()
-    query = (
-        select(GameResult.calculated_size, GameResult.issue_id, GameResult.result_number, GameResult.source_color)
-        .order_by(desc(GameResult.issue_id))
-        .limit(max(default_limit, 10000))
-    )
+    req_limit = max(default_limit, 10000)
+    is_mock = "mock" in type(session).__name__.lower()
+    is_real_session = (not is_mock) or (session.__dict__.get("_force_count_query") is True)
+    now_mono = time.monotonic()
+    session_id = id(session)
 
-    result = await session.execute(query)
-    rows = result.fetchall()
-    total_db_count = len(rows)
+    cached_gap_data = None
+    if (
+        is_real_session
+        and _GAME_RESULTS_CACHE["session_id"] == session_id
+        and _GAME_RESULTS_CACHE["rows"]
+        and _GAME_RESULTS_CACHE["limit"] >= req_limit
+        and (now_mono - _GAME_RESULTS_CACHE["timestamp"]) < 2.0
+    ):
+        rows = _GAME_RESULTS_CACHE["rows"]
+        total_db_count = _GAME_RESULTS_CACHE["count"]
+        cached_gap_data = _GAME_RESULTS_CACHE.get("gap_data")
+    else:
+        query = (
+            select(GameResult.calculated_size, GameResult.issue_id, GameResult.result_number, GameResult.source_color)
+            .order_by(desc(GameResult.issue_id))
+            .limit(req_limit)
+        )
 
-    # Execute total count query only on real SQLAlchemy sessions (avoiding double-call on AsyncMock in unit tests)
-    is_real_session = type(session).__name__ not in ("AsyncMock", "MagicMock") or getattr(session, "_force_count_query", False)
-    if is_real_session:
-        try:
-            count_stmt = select(func.count()).select_from(GameResult)
-            count_res = await session.execute(count_stmt)
-            if hasattr(count_res, "scalar"):
-                c_val = count_res.scalar()
-                if c_val is not None and isinstance(c_val, int) and c_val >= len(rows):
-                    total_db_count = c_val
-        except Exception:
-            pass
+        result = await session.execute(query)
+        rows = result.fetchall()
+        total_db_count = len(rows)
+
+        if is_real_session:
+            try:
+                count_stmt = select(func.count()).select_from(GameResult)
+                count_res = await session.execute(count_stmt)
+                if hasattr(count_res, "scalar"):
+                    c_val = count_res.scalar()
+                    if c_val is not None and isinstance(c_val, int) and c_val >= len(rows):
+                        total_db_count = c_val
+            except Exception:
+                pass
+            _GAME_RESULTS_CACHE["timestamp"] = now_mono
+            _GAME_RESULTS_CACHE["session_id"] = session_id
+            _GAME_RESULTS_CACHE["limit"] = req_limit
+            _GAME_RESULTS_CACHE["rows"] = rows
+            _GAME_RESULTS_CACHE["count"] = total_db_count
 
     t1_db = time.monotonic()
     database_ms = (t1_db - t0_db) * 1000.0
@@ -977,46 +1026,63 @@ async def generate_prediction(
         }
 
     # === PRE-PREDICTION DATA GATE & FULL-POPULATION GAP ANALYSIS ===
-    contiguous_rows = []
-    gap_count = 0
-    largest_gap = 0
-    daily_rollover_count = 0
-    contiguous_segments = []
-    current_segment = []
+    if cached_gap_data:
+        contiguous_rows = cached_gap_data["contiguous_rows"]
+        gap_count = cached_gap_data["gap_count"]
+        largest_gap = cached_gap_data["largest_gap"]
+        daily_rollover_count = cached_gap_data["daily_rollover_count"]
+        contiguous_segment_count = cached_gap_data["contiguous_segment_count"]
+        largest_contiguous_segment = cached_gap_data["largest_contiguous_segment"]
+    else:
+        contiguous_rows = []
+        gap_count = 0
+        largest_gap = 0
+        daily_rollover_count = 0
+        contiguous_segments = []
+        current_segment = []
 
-    if rows:
-        for i in range(len(rows)):
-            row = rows[i]
-            if not (0 <= getattr(row, "result_number", -1) <= 9) or getattr(row, "calculated_size", None) not in ("BIG", "SMALL"):
-                break
+        if rows:
+            for i in range(len(rows)):
+                row = rows[i]
+                if not (0 <= getattr(row, "result_number", -1) <= 9) or getattr(row, "calculated_size", None) not in ("BIG", "SMALL"):
+                    break
 
-            if i > 0:
-                # rows is ordered DESC (latest first). So prev is i-1 (newer), curr is i (older)
-                prev_id = rows[i - 1].issue_id
-                curr_id = row.issue_id
-                missing, is_rollover = parse_issue_chronology_gap(curr_id, prev_id)
-                if is_rollover:
-                    daily_rollover_count += 1
-                if missing > 0:
-                    gap_count += 1
-                    if missing > largest_gap:
-                        largest_gap = missing
-                    if current_segment:
-                        contiguous_segments.append(current_segment)
-                        current_segment = []
-                    if len(contiguous_rows) == 0 and i > 0:
-                        contiguous_rows = list(rows[:i])
+                if i > 0:
+                    prev_id = rows[i - 1].issue_id
+                    curr_id = row.issue_id
+                    missing, is_rollover = parse_issue_chronology_gap(curr_id, prev_id)
+                    if is_rollover:
+                        daily_rollover_count += 1
+                    if missing > 0:
+                        gap_count += 1
+                        if missing > largest_gap:
+                            largest_gap = missing
+                        if current_segment:
+                            contiguous_segments.append(current_segment)
+                            current_segment = []
+                        if len(contiguous_rows) == 0 and i > 0:
+                            contiguous_rows = list(rows[:i])
 
-            current_segment.append(row)
+                current_segment.append(row)
 
-        if current_segment:
-            contiguous_segments.append(current_segment)
+            if current_segment:
+                contiguous_segments.append(current_segment)
 
-        if len(contiguous_rows) == 0:
-            contiguous_rows = list(rows)
+            if len(contiguous_rows) == 0:
+                contiguous_rows = list(rows)
 
-    contiguous_segment_count = len(contiguous_segments) if contiguous_segments else 1
-    largest_contiguous_segment = max((len(s) for s in contiguous_segments), default=len(contiguous_rows))
+        contiguous_segment_count = len(contiguous_segments) if contiguous_segments else 1
+        largest_contiguous_segment = max((len(s) for s in contiguous_segments), default=len(contiguous_rows))
+
+        if is_real_session:
+            _GAME_RESULTS_CACHE["gap_data"] = {
+                "contiguous_rows": contiguous_rows,
+                "gap_count": gap_count,
+                "largest_gap": largest_gap,
+                "daily_rollover_count": daily_rollover_count,
+                "contiguous_segment_count": contiguous_segment_count,
+                "largest_contiguous_segment": largest_contiguous_segment,
+            }
 
     if len(contiguous_rows) < 5:
         return {
@@ -1074,35 +1140,37 @@ async def generate_prediction(
     t_start_ai = time.monotonic()
     ai_reasoning = None
     try:
-        from app.analytics.ai_rotator import fetch_ai_prediction
-        indicator_summary = {
-            "entropy": shannon_entropy,
-            "z_score": z_score,
-            "indicator_signals": {
-                name: {"pred": ind.get("prediction"), "conf": ind.get("confidence", 0)}
-                for name, ind in indicators.items()
-                if ind.get("prediction")
-            },
-        }
-        try:
-            settings = get_settings()
-            ai_timeout = float(getattr(settings, "ai_timeout_seconds", 3.0))
-            ai_res = await asyncio.wait_for(
-                fetch_ai_prediction(sizes, indicator_summary),
-                timeout=ai_timeout
-            )
-        except (asyncio.TimeoutError, TimeoutError):
-            logger.warning("ai_prediction_timeout_exceeded", timeout_seconds=ai_timeout)
-            ai_res = None
+        from app.analytics.ai_rotator import fetch_ai_prediction, CACHE_TTL
+        import app.analytics.ai_rotator as ai_rot_module
+        now_m = time.monotonic()
+        cached_ai = getattr(ai_rot_module, "_ai_cache", None)
+        cached_ai_time = getattr(ai_rot_module, "_ai_cache_time", 0.0)
 
-        if ai_res and ai_res.get("ai_prediction"):
-            ai_reasoning = ai_res
+        if cached_ai and (now_m - cached_ai_time) < CACHE_TTL:
+            ai_reasoning = cached_ai
+        else:
+            indicator_summary = {
+                "entropy": shannon_entropy,
+                "z_score": z_score,
+                "indicator_signals": {
+                    name: {"pred": ind.get("prediction"), "conf": ind.get("confidence", 0)}
+                    for name, ind in indicators.items()
+                    if ind.get("prediction")
+                },
+            }
+            # Launch background task for LLM fetch so statistical engine completes in < 5ms
+            try:
+                asyncio.create_task(fetch_ai_prediction(sizes, indicator_summary))
+            except Exception:
+                pass
+
+        if ai_reasoning and ai_reasoning.get("ai_prediction"):
             indicators["ai_pattern_reasoning"] = {
-                "prediction": ai_res["ai_prediction"],
-                "confidence": ai_res["ai_confidence"],
-                "reason": ai_res["ai_reason"],
-                "provider": ai_res.get("provider"),
-                "model": ai_res.get("model"),
+                "prediction": ai_reasoning["ai_prediction"],
+                "confidence": ai_reasoning["ai_confidence"],
+                "reason": ai_reasoning["ai_reason"],
+                "provider": ai_reasoning.get("provider"),
+                "model": ai_reasoning.get("model"),
             }
     except Exception as ai_err:
         logger.warning("ai_rotator_integration_warning", error=str(ai_err))
@@ -1305,23 +1373,35 @@ async def generate_prediction(
 
     # === POPULATION B: TRUE HISTORICAL OOS MODEL-HEALTH EVALUATION ===
     # Join immutable past engine predictions with actual observed outcomes
-    eval_stmt = (
-        select(
-            EnginePrediction.issue_id,
-            EnginePrediction.predicted_size,
-            EnginePrediction.confidence,
-            GameResult.calculated_size,
+    if (
+        is_real_session
+        and _MODEL_HEALTH_CACHE["session_id"] == session_id
+        and _MODEL_HEALTH_CACHE["rows"]
+        and (now_mono - _MODEL_HEALTH_CACHE["timestamp"]) < 2.0
+    ):
+        eval_rows = _MODEL_HEALTH_CACHE["rows"]
+    else:
+        eval_stmt = (
+            select(
+                EnginePrediction.issue_id,
+                EnginePrediction.predicted_size,
+                EnginePrediction.confidence,
+                GameResult.calculated_size,
+            )
+            .join(GameResult, EnginePrediction.issue_id == GameResult.issue_id)
+            .order_by(desc(EnginePrediction.issue_id))
+            .limit(1000)
         )
-        .join(GameResult, EnginePrediction.issue_id == GameResult.issue_id)
-        .order_by(desc(EnginePrediction.issue_id))
-        .limit(1000)
-    )
-    eval_rows = []
-    try:
-        eval_res = await session.execute(eval_stmt)
-        eval_rows = eval_res.fetchall()
-    except Exception as eval_err:
-        logger.warning("historical_model_health_query_failed", error=str(eval_err))
+        eval_rows = []
+        try:
+            eval_res = await session.execute(eval_stmt)
+            eval_rows = eval_res.fetchall()
+            if is_real_session:
+                _MODEL_HEALTH_CACHE["timestamp"] = now_mono
+                _MODEL_HEALTH_CACHE["session_id"] = session_id
+                _MODEL_HEALTH_CACHE["rows"] = eval_rows
+        except Exception as eval_err:
+            logger.warning("historical_model_health_query_failed", error=str(eval_err))
 
     evaluated_prediction_count = len(eval_rows)
     correct_prediction_count = 0
@@ -1472,29 +1552,34 @@ async def generate_prediction(
     )
 
     # Fetch AI Digit Hypothesis in parallel/advisory mode
-    if ai_reasoning:
-        try:
-            from app.analytics.ai_rotator import fetch_ai_digit_prediction
+    try:
+        from app.analytics.ai_rotator import fetch_ai_digit_prediction, CACHE_TTL
+        import app.analytics.ai_rotator as ai_rot_module
+        now_m = time.monotonic()
+        cached_d_ai = getattr(ai_rot_module, "_ai_digit_cache", None)
+        cached_d_time = getattr(ai_rot_module, "_ai_digit_cache_time", 0.0)
+
+        if cached_d_ai and (now_m - cached_d_time) < CACHE_TTL:
+            digit_res["ai_digit_hypothesis"] = cached_d_ai
+        else:
             ai_digit_summary = {
                 "entropy": shannon_entropy,
                 "z_score": z_score,
                 "top_statistical_digits": digit_res.get("top_numbers", [0, 1, 2, 3]),
                 "regime": regime_name,
             }
-            ai_digit_res = await asyncio.wait_for(
-                fetch_ai_digit_prediction(numbers_active or [], sizes_active, ai_digit_summary),
-                timeout=float(getattr(get_settings(), "ai_timeout_seconds", 3.0)),
-            )
-            if ai_digit_res:
-                digit_res["ai_digit_hypothesis"] = ai_digit_res
-        except Exception as ai_d_err:
-            logger.warning("ai_digit_rotator_warning", error=str(ai_d_err))
+            try:
+                asyncio.create_task(fetch_ai_digit_prediction(numbers_active or [], sizes_active, ai_digit_summary))
+            except Exception:
+                pass
+    except Exception:
+        pass
 
     # === DUAL GAME CONFLUENCE & SYNERGY ===
     digit_size_pred = "BIG" if digit_res.get("p_big", 0.5) >= 0.50 else "SMALL"
     dual_game_agreement = (prediction == digit_size_pred)
 
-    if dual_game_agreement and confidence >= 0.65:
+    if dual_game_agreement and confidence >= 0.65 and confluence_level != "INSUFFICIENT_SAMPLE":
         confluence_level = "DUAL_GAME_SUPER_CONFLUENCE"
 
     # Non-invasive shadow telemetry recording
@@ -1616,13 +1701,19 @@ async def persist_original_prediction(session: AsyncSession, prediction_res: dic
     digit_method = digit_data.get("method")
     digit_abstained = 1 if digit_data.get("abstained") else 0
 
-    dialect_name = "postgresql"
-    try:
-        bind = session.get_bind()
-        if hasattr(bind, "dialect") and hasattr(bind.dialect, "name"):
-            dialect_name = bind.dialect.name
-    except Exception:
-        pass
+    dialect_name = getattr(session, "_cached_dialect_name", None)
+    if not dialect_name:
+        try:
+            bind = session.get_bind()
+            if hasattr(bind, "dialect") and hasattr(bind.dialect, "name"):
+                dialect_name = bind.dialect.name
+                setattr(session, "_cached_dialect_name", dialect_name)
+        except Exception:
+            dialect_name = "postgresql"
+            setattr(session, "_cached_dialect_name", dialect_name)
+
+    if upcoming_issue in _PERSISTED_ISSUES_CACHE:
+        return prediction_res
 
     try:
         if dialect_name == "postgresql":
@@ -1649,6 +1740,7 @@ async def persist_original_prediction(session: AsyncSession, prediction_res: dic
             ).on_conflict_do_nothing(index_elements=["issue_id"])
             await session.execute(stmt)
             await session.commit()
+            _PERSISTED_ISSUES_CACHE.add(upcoming_issue)
         else:
             exists_stmt = select(EnginePrediction.id).where(EnginePrediction.issue_id == upcoming_issue)
             res = await session.execute(exists_stmt)
@@ -1675,6 +1767,7 @@ async def persist_original_prediction(session: AsyncSession, prediction_res: dic
                 )
                 session.add(ep)
                 await session.commit()
+            _PERSISTED_ISSUES_CACHE.add(upcoming_issue)
     except Exception as err:
         try:
             await session.rollback()
