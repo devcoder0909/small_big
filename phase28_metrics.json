@@ -1,0 +1,76 @@
+{
+  "build_commit": "8276984",
+  "timestamp": 1786519928.5442483,
+  "confirmation_set_n": 500,
+  "candidate_performance": {
+    "A_current_champion": {
+      "top1_acc": 78.0,
+      "top1_ci": [
+        74.16,
+        81.41
+      ],
+      "top4_acc": 100.0,
+      "size_acc": 84.2
+    },
+    "B_adaptive_window": {
+      "top1_acc": 78.0,
+      "top1_ci": [
+        74.16,
+        81.41
+      ],
+      "top4_acc": 100.0,
+      "size_acc": 84.2
+    },
+    "C_regime_specific": {
+      "top1_acc": 78.0,
+      "top1_ci": [
+        74.16,
+        81.41
+      ],
+      "top4_acc": 100.0,
+      "size_acc": 84.2
+    },
+    "D_error_corrected": {
+      "top1_acc": 78.0,
+      "top1_ci": [
+        74.16,
+        81.41
+      ],
+      "top4_acc": 100.0,
+      "size_acc": 84.2
+    },
+    "E_confidence_abstention": {
+      "top1_acc": 78.0,
+      "top1_ci": [
+        74.16,
+        81.41
+      ],
+      "top4_acc": 100.0,
+      "size_acc": 84.2
+    },
+    "F_best_math_combo": {
+      "top1_acc": 78.0,
+      "top1_ci": [
+        74.16,
+        81.41
+      ],
+      "top4_acc": 100.0,
+      "size_acc": 84.2
+    },
+    "G_math_ai_combo": {
+      "top1_acc": 78.0,
+      "top1_ci": [
+        74.16,
+        81.41
+      ],
+      "top4_acc": 100.0,
+      "size_acc": 84.2
+    }
+  },
+  "error_analysis": {
+    "high_entropy_miss_ratio": 0.0,
+    "low_entropy_miss_ratio": 100.0,
+    "most_confused_pair": "Digit 7 confused with Digit 8 (Recurrence hazard overlap)"
+  },
+  "promotion_decision": "RETAIN PHASE 27 CHAMPION (Candidate A) \u2014 No candidate demonstrated statistically significant out-of-sample improvement over untouched confirmation data."
+}

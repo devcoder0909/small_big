@@ -1,0 +1,65 @@
+{
+  "build_commit": "8276984",
+  "timestamp": 1786520623.7719686,
+  "confirmation_sample_size": 1000,
+  "candidate_results": {
+    "A_current_champion": {
+      "top1_acc": 77.9,
+      "top1_ci": [
+        75.22,
+        80.36
+      ],
+      "top2_acc": 92.2,
+      "top3_acc": 98.7,
+      "top4_acc": 100.0,
+      "size_acc": 84.3
+    },
+    "B_math_alternatives": {
+      "top1_acc": 77.9,
+      "top1_ci": [
+        75.22,
+        80.36
+      ],
+      "top2_acc": 92.2,
+      "top3_acc": 98.7,
+      "top4_acc": 100.0,
+      "size_acc": 84.3
+    },
+    "C_ai_only": {
+      "top1_acc": 51.9,
+      "top1_ci": [
+        48.8,
+        54.98
+      ],
+      "top2_acc": 66.2,
+      "top3_acc": 72.7,
+      "top4_acc": 74.0,
+      "size_acc": 79.5
+    },
+    "D_math_ai_combo": {
+      "top1_acc": 77.9,
+      "top1_ci": [
+        75.22,
+        80.36
+      ],
+      "top2_acc": 92.2,
+      "top3_acc": 98.7,
+      "top4_acc": 100.0,
+      "size_acc": 84.3
+    },
+    "E_new_parity_markov": {
+      "top1_acc": 77.9,
+      "top1_ci": [
+        75.22,
+        80.36
+      ],
+      "top2_acc": 92.2,
+      "top3_acc": 98.7,
+      "top4_acc": 100.0,
+      "size_acc": 84.3
+    }
+  },
+  "ai_incremental_lift": "0.0% (AI Direct Control Provides No Out-of-Sample Lift Over Statistical Baseline)",
+  "is_champion_defeated": false,
+  "final_decision": "CURRENT CHAMPION IS THE BEST VERIFIED MODEL \u2014 STOP ENHANCEMENT."
+}

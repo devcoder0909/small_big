@@ -82,9 +82,20 @@ HTML_PAGE = """<!DOCTYPE html>
     <div class="g-box"><div class="g-val green" id="stat-window">-</div><div class="g-lbl">Active Window</div></div>
   </div>
 
+  <!-- LATEST COMPLETED REAL GAME RESULT -->
+  <div class="box" style="text-align:center;border-color:#333;background:#181824" id="latest-result-card">
+    <div class="lbl" style="color:#ffd700">LATEST REAL COMPLETED RESULT</div>
+    <div id="latest-period-label" style="font-size:11px;color:#aaa;margin-bottom:2px">PERIOD #---</div>
+    <div style="display:flex;justify-content:center;align-items:center;gap:12px;margin:4px 0">
+      <div><span style="font-size:10px;color:#888;text-transform:uppercase">Actual Digit:</span> <b style="font-size:24px;font-weight:900;color:#ffd700" id="latest-num-val">-</b></div>
+      <div><span style="font-size:10px;color:#888;text-transform:uppercase">Actual Size:</span> <span class="tag" style="font-size:14px;padding:3px 8px" id="latest-size-val">---</span></div>
+    </div>
+    <div class="sub" style="font-size:9px;color:#666">Real Game Database Record</div>
+  </div>
+
   <div class="box">
     <div class="lbl" style="margin-bottom:8px">
-      <span>Game History (Number & Result)</span>
+      <span>Real Game History (Actual Number & Size)</span>
     </div>
     <table>
       <thead>
@@ -207,8 +218,20 @@ async function updateData() {
       }
     }
 
-    // Real Game History section (show top 5)
+    // Real Game History section & Latest Completed Result
     if (data.recent_history && data.recent_history.length > 0) {
+      var latestRec = data.recent_history[0];
+      var latestOutcome = latestRec.result || latestRec.actual || latestRec.size || '---';
+      var latestNumStr = (latestRec.result_number !== undefined && latestRec.result_number !== null) ? latestRec.result_number : (latestRec.number !== undefined ? latestRec.number : '-');
+      var latestPeriod = String(latestRec.issue_id || latestRec.period || '').slice(-8);
+
+      document.getElementById('latest-period-label').textContent = 'PERIOD #' + (latestPeriod || '---');
+      document.getElementById('latest-num-val').textContent = latestNumStr;
+
+      var lSizeEl = document.getElementById('latest-size-val');
+      lSizeEl.textContent = latestOutcome;
+      lSizeEl.className = 'tag ' + (latestOutcome === 'BIG' ? 'big' : 'small');
+
       var hist = data.recent_history.slice(0, 5);
       var tbody = document.getElementById('history-body');
       tbody.innerHTML = hist.map(function(item) {
