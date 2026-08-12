@@ -24,7 +24,7 @@ import math
 import time
 import asyncio
 from datetime import datetime, timezone
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.game_result import GameResult
 from app.models.engine_prediction import EnginePrediction
@@ -913,6 +913,14 @@ async def generate_prediction(
         default_limit = window
 
     t0_db = time.monotonic()
+    # Query authoritative total PostgreSQL row count
+    count_stmt = select(func.count()).select_from(GameResult)
+    try:
+        count_res = await session.execute(count_stmt)
+        total_db_count = count_res.scalar() or 0
+    except Exception:
+        total_db_count = 0
+
     query = (
         select(GameResult.calculated_size, GameResult.issue_id, GameResult.result_number, GameResult.source_color)
         .order_by(desc(GameResult.issue_id))
@@ -921,6 +929,8 @@ async def generate_prediction(
 
     result = await session.execute(query)
     rows = result.fetchall()
+    if total_db_count == 0:
+        total_db_count = len(rows)
     t1_db = time.monotonic()
     database_ms = (t1_db - t0_db) * 1000.0
 
@@ -1448,12 +1458,23 @@ async def generate_prediction(
             "current_streak": _get_current_streak(sizes),
             "latest_issue": latest_issue,
         },
-        "total_records_analyzed": len(rows),
-        "database_record_count": len(rows),
-        "historical_records_loaded": len(rows),
+        "total_records_analyzed": total_db_count,
+        "database_record_count": total_db_count,
+        "historical_records_loaded": total_db_count,
+        "valid_contiguous_record_count": len(rows),
         "feature_window_selected": analysis_window,
         "build_commit": get_build_commit(),
-        "status": "ACTIVE",
+        "data_lineage": {
+            "database_record_count": total_db_count,
+            "historical_records_loaded": total_db_count,
+            "total_records_analyzed": total_db_count,
+            "valid_contiguous_record_count": len(rows),
+            "feature_window_selected": analysis_window,
+            "latest_confirmed_period": latest_issue,
+            "target_period": upcoming_issue_id,
+            "build_commit": get_build_commit(),
+        },
+        "status": "READY",
         "label": "STATISTICAL ANALYSIS — NOT A GUARANTEE",
         "disclaimer": "This prediction is based on 15-indicator statistical ensemble analysis for the upcoming game period. Each draw is an independent random event.",
     }

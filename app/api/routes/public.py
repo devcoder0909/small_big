@@ -137,11 +137,14 @@ async function updateData() {
         var level = isSuper ? 'SUPER CONFLUENCE' : (data.confidence >= 0.72 ? 'HIGH' : data.confidence >= 0.56 ? 'MED' : 'LOW');
         var badgeClass = (isSuper || data.confidence >= 0.72) ? 'high' : data.confidence >= 0.56 ? 'med' : 'low';
 
+        var dbCount = (data.data_lineage && data.data_lineage.database_record_count) || data.database_record_count || data.total_records_analyzed || '-';
+        var winCount = (data.data_lineage && data.data_lineage.feature_window_selected) || data.selected_window || data.feature_window_selected || '-';
+
         document.getElementById('conf-text').innerHTML = 'Confidence: <b>' + confPct + '%</b> — <span class="badge ' + badgeClass + '">' + level + '</span>';
         document.getElementById('pred-status').innerHTML = '<span class="status-dot ready"></span>Prediction Ready';
         document.getElementById('stat-signals').textContent = (data.agreeing_indicators || '-') + '/' + (data.active_indicators || '-');
-        document.getElementById('stat-records').textContent = (data.database_record_count || data.total_records_analyzed || '-').toLocaleString();
-        document.getElementById('stat-window').textContent = (data.selected_window || data.feature_window_selected || '-') + ' draws';
+        document.getElementById('stat-records').textContent = Number(dbCount).toLocaleString();
+        document.getElementById('stat-window').textContent = winCount + ' draws';
       }
     }
     // Waiting / Stale / Gap / Error diagnostic states
@@ -157,9 +160,11 @@ async function updateData() {
         var msg = data.message || (data.reason ? data.reason.replace(/_/g, ' ') : 'Collecting historical records...');
         document.getElementById('conf-text').textContent = msg;
         document.getElementById('pred-status').innerHTML = '<span class="status-dot waiting"></span>' + (status ? status.replace(/_/g, ' ') : 'Waiting for data');
+        var dbCountWait = (data.data_lineage && data.data_lineage.database_record_count) || data.database_record_count || data.total_records_analyzed || '-';
+        var winCountWait = (data.data_lineage && data.data_lineage.feature_window_selected) || data.selected_window || data.feature_window_selected || '-';
         document.getElementById('stat-signals').textContent = '-';
-        document.getElementById('stat-records').textContent = (data.database_record_count || data.total_records_analyzed || '-').toLocaleString();
-        document.getElementById('stat-window').textContent = (data.selected_window || data.feature_window_selected || '-') + ' draws';
+        document.getElementById('stat-records').textContent = Number(dbCountWait).toLocaleString();
+        document.getElementById('stat-window').textContent = winCountWait + ' draws';
       }
     }
 
