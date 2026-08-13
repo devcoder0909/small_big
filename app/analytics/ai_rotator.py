@@ -259,11 +259,11 @@ async def fetch_ai_prediction(sizes: list[str], stat_summary: dict) -> dict | No
     if not providers:
         return None
 
-    chronological_sequence = ", ".join(list(reversed(sizes[:150])))
+    chronological_sequence = ", ".join(list(reversed(sizes[:100])))
     prompt = (
         "You are a world-class mathematical pattern analyst specializing in binary sequence forecasting.\n"
         "Your job: analyze the sequence and statistical indicators below, then predict the NEXT outcome.\n\n"
-        f"RECENT 150 DRAWS (chronological order: oldest -> newest): [{chronological_sequence}]\n\n"
+        f"RECENT 100 DRAWS (chronological order: oldest -> newest): [{chronological_sequence}]\n\n"
         f"LOCAL STATISTICAL ENGINE OUTPUT:\n{json.dumps(stat_summary, indent=2)}\n\n"
         "Respond ONLY with a JSON object in this EXACT format, with no markdown or text:\n"
         '{"ai_prediction": "SMALL" or "BIG", "ai_confidence": 0.55 to 0.95, "ai_reason": "concise 1-sentence reasoning"}'
@@ -542,11 +542,11 @@ async def fetch_ai_digit_prediction(numbers: list[int], sizes: list[str], stat_s
     if not providers:
         return None
 
-    digit_seq = ", ".join(str(n) for n in list(reversed(numbers[:150])))
+    digit_seq = ", ".join(str(n) for n in list(reversed(numbers[:100])))
     prompt = (
         "You are a quantitative mathematical analyst specializing in single-digit (0-9) pattern forecasting.\n"
         "Your task: analyze the digit sequence below, then predict the NEXT single digit (0-9).\n\n"
-        f"RECENT 150 DIGIT DRAWS (oldest -> newest): [{digit_seq}]\n\n"
+        f"RECENT 100 DIGIT DRAWS (oldest -> newest): [{digit_seq}]\n\n"
         f"LOCAL STATISTICAL SUMMARY:\n{json.dumps(stat_summary, indent=2)}\n\n"
         "Respond ONLY with a JSON object in this EXACT format, with no markdown or extra text:\n"
         '{"ai_digit_prediction": 7, "ai_digit_confidence": 0.15, "ai_top_3": [7, 8, 6], "ai_reason": "concise 1-sentence reasoning"}'
