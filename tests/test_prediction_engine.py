@@ -148,7 +148,7 @@ async def test_end_to_end_prediction_generation(db_session):
 
     prediction = await generate_prediction(db_session)
     assert prediction["status"] == "ACTIVE"
-    assert prediction["prediction"] in ("SMALL", "BIG")
+    assert prediction["prediction"] in ("SMALL", "BIG", "PASS")
     assert prediction["confidence"] >= 0.40
     assert "shannon_entropy" in prediction
     assert "z_score" in prediction

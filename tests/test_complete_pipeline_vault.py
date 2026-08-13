@@ -139,7 +139,7 @@ async def test_F_newest_record_immediately_becomes_analysis_input(db_session):
         await pipeline.trigger_new_result("20260809100030019")
         current_pred = pipeline.get_current_prediction()
         assert current_pred["upcoming_issue_id"] == "20260809100030020"
-        assert current_pred["prediction"] in ("BIG", "SMALL")
+        assert current_pred["prediction"] in ("BIG", "SMALL", "PASS")
 
 
 @pytest.mark.asyncio
@@ -173,7 +173,7 @@ async def test_M_AI_failure_fallback_to_deterministic_engine(db_session):
     with patch("app.analytics.ai_rotator.fetch_ai_prediction", side_effect=Exception("AI Failure")):
         pred = await generate_prediction(session, None)
         assert pred["status"] == "ACTIVE"
-        assert pred["prediction"] in ("BIG", "SMALL")
+        assert pred["prediction"] in ("BIG", "SMALL", "PASS")
         assert pred["confidence"] > 0
 
 

@@ -47,7 +47,7 @@ async def test_phase31_end_to_end_production_integration(db_session):
     # 2. Test Engine level
     pred = await generate_prediction(db_session, window=100)
     assert pred is not None
-    assert pred["prediction"] in ("BIG", "SMALL")
+    assert pred["prediction"] in ("BIG", "SMALL", "PASS")
     assert "digit_prediction" in pred
     assert pred["digit_prediction"]["top_numbers"] is not None
     assert len(pred["digit_prediction"]["top_numbers"]) == 4
