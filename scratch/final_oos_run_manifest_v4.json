@@ -1,0 +1,32 @@
+{
+  "benchmark_version": "v4.3_hardened",
+  "git_commit": "c2ab080",
+  "canonical_sha256": "53080b9fdcabcc96663213642941ede6e777c90e5a533e9bdd417a841d22c322",
+  "target_set_hash": null,
+  "target_count": 0,
+  "required_target_count": 30,
+  "context_lengths": [
+    40,
+    100,
+    150
+  ],
+  "exact_provider_model_matrix": {},
+  "prompt_version": "v4.3_locked_prompt",
+  "bootstrap_seed": 42,
+  "bootstrap_iterations": 1000,
+  "expected_attempts": 0,
+  "actual_attempts": 0,
+  "base_experiments": 0,
+  "post_processing_experiments": 0,
+  "total_ledger_rows": 0,
+  "live_calls": 0,
+  "cache_hits": 0,
+  "successful_predictions": 0,
+  "failures": 0,
+  "leakage_violations": 0,
+  "integrity_conflicts": 0,
+  "benchmark_status": "NOT_RUN_INSUFFICIENT_DATA",
+  "context_decision": "INSUFFICIENT DATA FOR FINAL LOCKED OOS",
+  "provider_decision": "INSUFFICIENT DATA FOR FINAL LOCKED OOS",
+  "generated_at_utc": "2026-08-13T07:03:55.416421+00:00"
+}

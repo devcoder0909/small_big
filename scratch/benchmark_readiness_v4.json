@@ -1,0 +1,17 @@
+{
+  "readiness_state": "INSUFFICIENT_HISTORY",
+  "readiness_status": "NOT READY \u2014 INSUFFICIENT FAIR COMPARISON TARGETS",
+  "canonical_records_unique": 73,
+  "canonical_sha256": "141e3bf906a9ab887e4da9aa91d548827fa67efe8c9dc4c12c720c283d455b3f",
+  "target_set_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "population_a_count": 33,
+  "population_b_count": 0,
+  "fair_comparison_targets": 0,
+  "required_target_count": 30,
+  "context_lengths": [
+    40,
+    100,
+    150
+  ],
+  "evaluated_at_utc": "2026-08-13T06:42:43.196373+00:00"
+}

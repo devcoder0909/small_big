@@ -1,0 +1,20 @@
+{
+  "timestamp_utc": "2026-08-13T06:42:43.209294+00:00",
+  "previous_unique_records": 63,
+  "current_unique_records": 73,
+  "new_unique_records": 10,
+  "previous_latest_issue": "20260813100050794",
+  "current_latest_issue": "20260813100050805",
+  "latest_issue_advanced": true,
+  "population_b_change": 0,
+  "n_fair_change": 0,
+  "duplicates_merged": 295,
+  "canonical_sha256": "141e3bf906a9ab887e4da9aa91d548827fa67efe8c9dc4c12c720c283d455b3f",
+  "target_set_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "population_a_count": 33,
+  "population_b_count": 0,
+  "fair_comparison_targets": 0,
+  "required_fair_targets": 30,
+  "readiness_state": "INSUFFICIENT_HISTORY",
+  "readiness_status": "NOT READY \u2014 INSUFFICIENT FAIR COMPARISON TARGETS"
+}

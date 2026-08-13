@@ -1,0 +1,47 @@
+{
+  "nara_1": {
+    "context_40": "N/A",
+    "context_100": "N/A",
+    "context_150": "N/A"
+  },
+  "nvidia_1": {
+    "context_40": "N/A",
+    "context_100": "N/A",
+    "context_150": "N/A"
+  },
+  "nvidia_2": {
+    "context_40": "N/A",
+    "context_100": "N/A",
+    "context_150": "N/A"
+  },
+  "openrouter_1": {
+    "context_40": "N/A",
+    "context_100": "N/A",
+    "context_150": "N/A"
+  },
+  "openrouter_2": {
+    "context_40": "N/A",
+    "context_100": "N/A",
+    "context_150": "N/A"
+  },
+  "groq_1": {
+    "context_40": "N/A",
+    "context_100": "N/A",
+    "context_150": "N/A"
+  },
+  "groq_2": {
+    "context_40": "N/A",
+    "context_100": "N/A",
+    "context_150": "N/A"
+  },
+  "gemini_1": {
+    "context_40": "N/A",
+    "context_100": "N/A",
+    "context_150": "N/A"
+  },
+  "Statistical_Baseline": {
+    "context_40": "N/A",
+    "context_100": "N/A",
+    "context_150": "N/A"
+  }
+}
