@@ -209,6 +209,13 @@ def predict_digits(
     else:
         probs = [round(p / sum_probs, 4) for p in raw_probs]
 
+    # Phase 40 Promoted Calibration: Conservative Dirichlet Probability Shrinkage (lambda = 0.50)
+    # Preserves Top-1 digit and Top-4 probability rankings with 100% fidelity while eliminating overconfidence
+    probs = [round(0.10 + 0.50 * (p - 0.10), 4) for p in probs]
+    sum_cal_probs = sum(probs)
+    if sum_cal_probs > 0:
+        probs = [round(p / sum_cal_probs, 4) for p in probs]
+
     # Final normalization adjustment for floating point precision
     diff = 1.0 - sum(probs)
     if abs(diff) > 1e-6:

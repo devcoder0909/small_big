@@ -1343,7 +1343,10 @@ async def generate_prediction(
         real_confidence = round(min(0.88, real_confidence + 0.04), 3)
         confluence_level = "MAJORITY_CONFLUENCE"
 
-    confidence = max(0.500, min(0.920, real_confidence))
+    # Phase 40 Promoted Calibration: Conservative Bayesian Confidence Shrinkage (gamma = 0.40)
+    # Preserves directional decision & Option A+D abstentions with 100% fidelity while eliminating overconfidence
+    calibrated_confidence = round(0.500 + 0.40 * (real_confidence - 0.500), 3)
+    confidence = max(0.500, min(0.920, calibrated_confidence))
 
     settings = get_settings()
     min_agreement_pct = getattr(settings, "confluence_min_agreement_pct", 65.0)
