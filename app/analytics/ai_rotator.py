@@ -49,6 +49,7 @@ def _get_provider_pool() -> list[dict]:
     nvidia_keys = [
         getattr(settings, "nvidia_api_key", ""),
         getattr(settings, "nvidia_api_key_2", ""),
+        getattr(settings, "nvidia_api_key_3", ""),
     ]
     nvidia_url = getattr(settings, "nvidia_base_url", "https://integrate.api.nvidia.com/v1")
     nvidia_model = getattr(settings, "nvidia_model", "nvidia/nemotron-3-ultra-550b-a55b")

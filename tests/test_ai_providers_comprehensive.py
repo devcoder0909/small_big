@@ -54,6 +54,7 @@ def _make_mock_settings(**kwargs):
     s = MagicMock()
     s.nvidia_api_key = kwargs.get("nvidia_api_key", "test-nvidia-key")
     s.nvidia_api_key_2 = kwargs.get("nvidia_api_key_2", "")
+    s.nvidia_api_key_3 = kwargs.get("nvidia_api_key_3", "")
     s.nvidia_base_url = kwargs.get("nvidia_base_url", "https://integrate.api.nvidia.com/v1")
     s.nvidia_model = kwargs.get("nvidia_model", "nvidia/nemotron-3-ultra-550b-a55b")
     s.openrouter_api_key = kwargs.get("openrouter_api_key", "test-openrouter-key")

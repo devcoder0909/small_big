@@ -60,6 +60,7 @@ class Settings(BaseSettings):
     gemini_api_key_2: str = Field(default="", alias="GEMINI_API_KEY_2")
     nvidia_api_key: str = Field(default="", alias="NVIDIA_API_KEY")
     nvidia_api_key_2: str = Field(default="", alias="NVIDIA_API_KEY_2")
+    nvidia_api_key_3: str = Field(default="", alias="NVIDIA_API_KEY_3")
     nvidia_base_url: str = Field(
         default="https://integrate.api.nvidia.com/v1", alias="NVIDIA_BASE_URL"
     )
