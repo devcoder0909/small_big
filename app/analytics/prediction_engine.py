@@ -1358,39 +1358,33 @@ async def generate_prediction(
     agreement_pct_val = round(consensus_ratio * 100, 1)
     ci_lower, ci_upper = _calculate_wilson_ci(agreeing, max(1, active_indicators))
 
-    # Option D Multi-Window Temporal Confluence (40 vs 100 draw agreement)
-    multi_window_confluence = True
+    # === PHASE 46 PROMOTED THREE-TIER ADAPTIVE DECISION POLICY ===
+    dir_40_match = True
+    dir_250_match = True
+
     if len(sizes) >= 40:
         short_sizes = sizes[:40]
         med_sizes = sizes[:min(100, len(sizes))]
+        long_sizes = sizes[:min(250, len(sizes))]
+
         short_inds = _run_all_indicators(short_sizes)
         med_inds = _run_all_indicators(med_sizes)
+        long_inds = _run_all_indicators(long_sizes)
+
         s_small, s_big, _, _ = _score_indicators(short_inds, weights)
         m_small, m_big, _, _ = _score_indicators(med_inds, weights)
+        l_small, l_big, _, _ = _score_indicators(long_inds, weights)
+
         short_dir = "SMALL" if s_small >= s_big else "BIG"
         med_dir = "SMALL" if m_small >= m_big else "BIG"
+        long_dir = "SMALL" if l_small >= l_big else "BIG"
+
         if short_dir != med_dir:
-            multi_window_confluence = False
-
-    is_high_confluence = (
-        agreement_pct_val >= min_agreement_pct
-        and shannon_entropy <= max_entropy
-        and agreeing >= min_agreeing_inds
-        and multi_window_confluence
-    )
-
-    if confidence >= 0.72 and agreeing >= 8:
-        edge_level = "HIGH EDGE"
-        confidence_level = "HIGH"
-    elif confidence >= 0.58 and agreeing >= 6:
-        edge_level = "MEDIUM EDGE"
-        confidence_level = "MEDIUM"
-    else:
-        edge_level = "LOW EDGE"
-        confidence_level = "LOW"
+            dir_40_match = False
+        if short_dir != long_dir:
+            dir_250_match = False
 
     # === POPULATION B: TRUE HISTORICAL OOS MODEL-HEALTH EVALUATION ===
-    # Join immutable past engine predictions with actual observed outcomes
     if (
         is_real_session
         and _MODEL_HEALTH_CACHE["session_id"] == session_id
@@ -1484,23 +1478,53 @@ async def generate_prediction(
         health_status = "HEALTHY"
         health_reason = "Historical out-of-sample predictions and current entropy are in calibrated alignment"
 
+    # Tier 1 (HIGH EDGE): Tri-window agreement + Entropy <= 0.985 + Confidence >= 0.650
+    is_tier1 = (
+        dir_40_match
+        and dir_250_match
+        and shannon_entropy <= 0.985
+        and confidence >= 0.650
+        and agreeing >= min_agreeing_inds
+    )
+
+    # Tier 2 (STANDARD EDGE): Dual-window agreement + Entropy <= 0.990 + Confidence >= 0.540
+    is_tier2 = (
+        dir_40_match
+        and shannon_entropy <= 0.990
+        and confidence >= 0.540
+        and agreeing >= min_agreeing_inds
+    )
+
     if not has_min_draw_sample:
         confluence_level = "INSUFFICIENT_SAMPLE"
         action_signal = "PASS_WAIT_FOR_CONFLUENCE"
         edge_recommendation = "PASS_WAIT_FOR_MINIMUM_SAMPLE_VALIDATION"
+        edge_level = "LOW EDGE"
+        confidence_level = "LOW"
     elif drift_detected:
         confluence_level = "LOW_CONFLUENCE"
         action_signal = "PASS_WAIT_FOR_CONFLUENCE"
         edge_recommendation = "PASS_WAIT_FOR_MODEL_CALIBRATION_RECOVERY"
         edge_level = "LOW EDGE"
-    elif is_high_confluence:
+        confidence_level = "LOW"
+    elif is_tier1:
         action_signal = f"PREDICT_{prediction}"
         edge_recommendation = f"EXECUTE_{prediction}_SIGNAL"
         confluence_level = "HIGH_CONFLUENCE"
+        edge_level = "HIGH EDGE"
+        confidence_level = "HIGH"
+    elif is_tier2:
+        action_signal = f"PREDICT_{prediction}"
+        edge_recommendation = f"EXECUTE_{prediction}_SIGNAL"
+        confluence_level = "STANDARD_CONFLUENCE"
+        edge_level = "STANDARD EDGE"
+        confidence_level = "MEDIUM"
     else:
         confluence_level = "LOW_CONFLUENCE"
         action_signal = "PASS_WAIT_FOR_CONFLUENCE"
-        edge_recommendation = "PASS_WAIT_FOR_HIGH_EDGE_SIGNAL"
+        edge_recommendation = "PASS_LOW_BINARY_EDGE_OR_HIGH_ENTROPY"
+        edge_level = "LOW EDGE"
+        confidence_level = "LOW"
         prediction = "PASS"
 
     upcoming_issue_id = None
