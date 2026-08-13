@@ -120,6 +120,7 @@ async def test_ai_rotator_429_cooldown_and_failover():
     mock_settings = MagicMock()
     mock_settings.nvidia_api_key = "fake_nvidia_1"
     mock_settings.nvidia_api_key_2 = ""
+    mock_settings.nvidia_api_key_3 = ""
     mock_settings.openrouter_api_key = "fake_openrouter_1"
     mock_settings.openrouter_api_key_2 = ""
     mock_settings.openrouter_api_key_3 = ""
