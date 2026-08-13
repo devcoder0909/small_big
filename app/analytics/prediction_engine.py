@@ -1355,10 +1355,25 @@ async def generate_prediction(
     agreement_pct_val = round(consensus_ratio * 100, 1)
     ci_lower, ci_upper = _calculate_wilson_ci(agreeing, max(1, active_indicators))
 
+    # Option D Multi-Window Temporal Confluence (40 vs 100 draw agreement)
+    multi_window_confluence = True
+    if len(sizes) >= 40:
+        short_sizes = sizes[:40]
+        med_sizes = sizes[:min(100, len(sizes))]
+        short_inds = _run_all_indicators(short_sizes)
+        med_inds = _run_all_indicators(med_sizes)
+        s_small, s_big, _, _ = _score_indicators(short_inds, weights)
+        m_small, m_big, _, _ = _score_indicators(med_inds, weights)
+        short_dir = "SMALL" if s_small >= s_big else "BIG"
+        med_dir = "SMALL" if m_small >= m_big else "BIG"
+        if short_dir != med_dir:
+            multi_window_confluence = False
+
     is_high_confluence = (
         agreement_pct_val >= min_agreement_pct
         and shannon_entropy <= max_entropy
         and agreeing >= min_agreeing_inds
+        and multi_window_confluence
     )
 
     if confidence >= 0.72 and agreeing >= 8:
@@ -1483,6 +1498,7 @@ async def generate_prediction(
         confluence_level = "LOW_CONFLUENCE"
         action_signal = "PASS_WAIT_FOR_CONFLUENCE"
         edge_recommendation = "PASS_WAIT_FOR_HIGH_EDGE_SIGNAL"
+        prediction = "PASS"
 
     upcoming_issue_id = None
     if latest_issue:
@@ -1689,7 +1705,7 @@ async def persist_original_prediction(session: AsyncSession, prediction_res: dic
     """
     upcoming_issue = prediction_res.get("upcoming_issue_id")
     predicted_size = prediction_res.get("prediction")
-    if not upcoming_issue or not predicted_size or predicted_size not in ("SMALL", "BIG"):
+    if not upcoming_issue or not predicted_size or predicted_size not in ("SMALL", "BIG", "PASS"):
         return
 
     digit_data = prediction_res.get("digit_prediction", {})
