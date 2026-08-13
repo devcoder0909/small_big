@@ -66,9 +66,16 @@ class Settings(BaseSettings):
     nvidia_model: str = Field(
         default="nvidia/nemotron-3-ultra-550b-a55b", alias="NVIDIA_MODEL"
     )
+    nararouter_api_key: str = Field(default="", alias="NARAROUTER_API_KEY")
+    nararouter_base_url: str = Field(
+        default="https://router.bynara.id/v1", alias="NARAROUTER_BASE_URL"
+    )
+    nararouter_model: str = Field(
+        default="nemotron-3-ultra", alias="NARAROUTER_MODEL"
+    )
 
     # AI Failover, Timeout & Rate-Limit Safety Controls
-    ai_providers: str = Field(default="nvidia,openrouter,groq,gemini", alias="AI_PROVIDERS")
+    ai_providers: str = Field(default="nara,nvidia,openrouter,groq,gemini", alias="AI_PROVIDERS")
     ai_max_requests_per_cycle: int = Field(default=1, alias="AI_MAX_REQUESTS_PER_CYCLE")
     ai_timeout_seconds: float = Field(default=3.0, alias="AI_TIMEOUT_SECONDS")
     ai_max_retries: int = Field(default=1, alias="AI_MAX_RETRIES")

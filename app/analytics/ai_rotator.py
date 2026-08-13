@@ -71,15 +71,34 @@ def _get_provider_pool() -> list[dict]:
         getattr(settings, "gemini_api_key_2", ""),
     ]
 
-    # Parse configured provider priority list (e.g. "nvidia,openrouter,groq,gemini")
-    raw_order = getattr(settings, "ai_providers", "nvidia,openrouter,groq,gemini")
+    nara_keys = [
+        getattr(settings, "nararouter_api_key", ""),
+    ]
+    nara_url = getattr(settings, "nararouter_base_url", "https://router.bynara.id/v1")
+    nara_model = getattr(settings, "nararouter_model", "nemotron-3-ultra")
+
+    # Parse configured provider priority list (e.g. "nara,nvidia,openrouter,groq,gemini")
+    raw_order = getattr(settings, "ai_providers", "nara,nvidia,openrouter,groq,gemini")
     priority_list = [p.strip().lower() for p in raw_order.split(",") if p.strip()]
 
     pool = []
     registered_names = set()
 
     for provider_name in priority_list:
-        if "nvidia" in provider_name and "nvidia" not in registered_names:
+        if "nara" in provider_name and "nara" not in registered_names:
+            for i, k in enumerate(nara_keys):
+                if _is_valid_api_key(k):
+                    pool.append({
+                        "name": f"nara_{i+1}",
+                        "url": f"{nara_url.rstrip('/')}/chat/completions",
+                        "key": k,
+                        "model": nara_model,
+                        "type": "openai_compat",
+                        "extra_payload": {"reasoning_effort": "high"},
+                    })
+            registered_names.add("nara")
+
+        elif "nvidia" in provider_name and "nvidia" not in registered_names:
             for i, k in enumerate(nvidia_keys):
                 if _is_valid_api_key(k):
                     pool.append({
@@ -240,11 +259,11 @@ async def fetch_ai_prediction(sizes: list[str], stat_summary: dict) -> dict | No
     if not providers:
         return None
 
-    chronological_sequence = ", ".join(list(reversed(sizes[:40])))
+    chronological_sequence = ", ".join(list(reversed(sizes[:100])))
     prompt = (
         "You are a world-class mathematical pattern analyst specializing in binary sequence forecasting.\n"
         "Your job: analyze the sequence and statistical indicators below, then predict the NEXT outcome.\n\n"
-        f"RECENT 40 DRAWS (chronological order: oldest -> newest): [{chronological_sequence}]\n\n"
+        f"RECENT 100 DRAWS (chronological order: oldest -> newest): [{chronological_sequence}]\n\n"
         f"LOCAL STATISTICAL ENGINE OUTPUT:\n{json.dumps(stat_summary, indent=2)}\n\n"
         "Respond ONLY with a JSON object in this EXACT format, with no markdown or text:\n"
         '{"ai_prediction": "SMALL" or "BIG", "ai_confidence": 0.55 to 0.95, "ai_reason": "concise 1-sentence reasoning"}'
@@ -279,12 +298,17 @@ async def fetch_ai_prediction(sizes: list[str], stat_summary: dict) -> dict | No
                 if provider["type"] == "openai_compat":
                     payload = {
                         "model": provider["model"],
-                        "messages": [{"role": "user", "content": prompt}],
+                        "messages": [
+                            {"role": "system", "content": "You are an analytical prediction engine. Analyze supplied historical observations. Use only information available before prediction target. Return required machine-readable JSON schema."},
+                            {"role": "user", "content": prompt}
+                        ],
                         "temperature": 0.2,
                         "top_p": 0.95,
-                        "max_tokens": 200,
+                        "max_tokens": 250,
                     }
-                    if "nemotron" in provider["model"].lower():
+                    if "extra_payload" in provider:
+                        payload.update(provider["extra_payload"])
+                    elif "nemotron" in provider["model"].lower():
                         payload["reasoning_budget"] = 100
 
                     resp = await client.post(
@@ -295,6 +319,18 @@ async def fetch_ai_prediction(sizes: list[str], stat_summary: dict) -> dict | No
                         },
                         json=payload,
                     )
+                    # Retry without reasoning_effort if endpoint rejects unsupported parameter
+                    if resp.status_code in (400, 422) and "reasoning_effort" in payload:
+                        payload_no_reasoning = dict(payload)
+                        del payload_no_reasoning["reasoning_effort"]
+                        resp = await client.post(
+                            provider["url"],
+                            headers={
+                                "Authorization": f"Bearer {provider['key']}",
+                                "Content-Type": "application/json",
+                            },
+                            json=payload_no_reasoning,
+                        )
                 else:
                     # Gemini API
                     resp = await client.post(
@@ -358,6 +394,12 @@ async def fetch_ai_prediction(sizes: list[str], stat_summary: dict) -> dict | No
 
                         logger.info("ai_prediction_success", provider=provider["name"], model=provider["model"])
                         return result
+
+                elif resp.status_code in (401, 403):
+                    status_category = str(resp.status_code)
+                    cooldown = float(getattr(settings, "ai_provider_cooldown_seconds", 60.0))
+                    _key_cooldowns[p_name] = now_mono + cooldown
+                    logger.warning("ai_provider_access_denied", provider=p_name, status=resp.status_code, cooldown_seconds=cooldown)
 
                 elif resp.status_code == 429:
                     status_category = "429"
@@ -500,11 +542,11 @@ async def fetch_ai_digit_prediction(numbers: list[int], sizes: list[str], stat_s
     if not providers:
         return None
 
-    digit_seq = ", ".join(str(n) for n in list(reversed(numbers[:40])))
+    digit_seq = ", ".join(str(n) for n in list(reversed(numbers[:100])))
     prompt = (
         "You are a quantitative mathematical analyst specializing in single-digit (0-9) pattern forecasting.\n"
         "Your task: analyze the digit sequence below, then predict the NEXT single digit (0-9).\n\n"
-        f"RECENT 40 DIGIT DRAWS (oldest -> newest): [{digit_seq}]\n\n"
+        f"RECENT 100 DIGIT DRAWS (oldest -> newest): [{digit_seq}]\n\n"
         f"LOCAL STATISTICAL SUMMARY:\n{json.dumps(stat_summary, indent=2)}\n\n"
         "Respond ONLY with a JSON object in this EXACT format, with no markdown or extra text:\n"
         '{"ai_digit_prediction": 7, "ai_digit_confidence": 0.15, "ai_top_3": [7, 8, 6], "ai_reason": "concise 1-sentence reasoning"}'
@@ -531,10 +573,16 @@ async def fetch_ai_digit_prediction(numbers: list[int], sizes: list[str], stat_s
                 if provider["type"] == "openai_compat":
                     payload = {
                         "model": provider["model"],
-                        "messages": [{"role": "user", "content": prompt}],
+                        "messages": [
+                            {"role": "system", "content": "You are an analytical prediction engine. Analyze supplied historical observations. Return required machine-readable JSON schema."},
+                            {"role": "user", "content": prompt}
+                        ],
                         "temperature": 0.2,
-                        "max_tokens": 150,
+                        "max_tokens": 200,
                     }
+                    if "extra_payload" in provider:
+                        payload.update(provider["extra_payload"])
+
                     resp = await client.post(
                         provider["url"],
                         headers={
@@ -543,6 +591,17 @@ async def fetch_ai_digit_prediction(numbers: list[int], sizes: list[str], stat_s
                         },
                         json=payload,
                     )
+                    if resp.status_code in (400, 422) and "reasoning_effort" in payload:
+                        payload_no_reasoning = dict(payload)
+                        del payload_no_reasoning["reasoning_effort"]
+                        resp = await client.post(
+                            provider["url"],
+                            headers={
+                                "Authorization": f"Bearer {provider['key']}",
+                                "Content-Type": "application/json",
+                            },
+                            json=payload_no_reasoning,
+                        )
                 else:
                     resp = await client.post(
                         f"{provider['url']}?key={provider['key']}",
@@ -574,6 +633,13 @@ async def fetch_ai_digit_prediction(numbers: list[int], sizes: list[str], stat_s
                         _ai_digit_cache_time = now_mono
                         _current_provider_index = (idx + 1) % num_providers
                         return result
+                elif resp.status_code in (401, 403):
+                    cooldown = float(getattr(settings, "ai_provider_cooldown_seconds", 60.0))
+                    _key_cooldowns[p_name] = now_mono + cooldown
+                    logger.warning("ai_digit_provider_access_denied", provider=p_name, status=resp.status_code)
+                elif resp.status_code == 429:
+                    cooldown = float(getattr(settings, "ai_provider_cooldown_seconds", 60.0))
+                    _key_cooldowns[p_name] = now_mono + cooldown
         except Exception as err:
             logger.warning("ai_digit_provider_error", provider=p_name, error=str(err))
 
