@@ -113,7 +113,10 @@ async def test_ai_rotator_429_cooldown_and_failover():
     sizes = ["BIG", "SMALL"] * 10
     stat_summary = {"entropy": 0.95}
 
-    # Clear cooldowns before test
+    # Clear module cache & cooldowns before test to ensure isolation
+    import app.analytics.ai_rotator as ai_rot_mod
+    ai_rot_mod._ai_cache = None
+    ai_rot_mod._ai_cache_time = 0
     _key_cooldowns.clear()
 
     # Mock settings with fake keys
